@@ -27,6 +27,7 @@ import (
 	runCmd "github.com/cli/cli/v2/pkg/cmd/run"
 	secretCmd "github.com/cli/cli/v2/pkg/cmd/secret"
 	sshKeyCmd "github.com/cli/cli/v2/pkg/cmd/ssh-key"
+	statusCmd "github.com/cli/cli/v2/pkg/cmd/status"
 	versionCmd "github.com/cli/cli/v2/pkg/cmd/version"
 	workflowCmd "github.com/cli/cli/v2/pkg/cmd/workflow"
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -100,6 +101,7 @@ func NewCmdRoot(f *cmdutil.Factory, version, buildDate string) *cobra.Command {
 	cmd.AddCommand(repoCmd.NewCmdRepo(&repoResolvingCmdFactory))
 	cmd.AddCommand(runCmd.NewCmdRun(&repoResolvingCmdFactory))
 	cmd.AddCommand(workflowCmd.NewCmdWorkflow(&repoResolvingCmdFactory))
+	cmd.AddCommand(statusCmd.NewCmdStatus(&repoResolvingCmdFactory, nil))
 
 	// Help topics
 	cmd.AddCommand(NewHelpTopic("environment"))
