@@ -74,6 +74,12 @@ type Notification struct {
 	}
 }
 
+type StatusItem struct {
+	Repository string // owner/repo
+	Identifier string // eg cli/cli#1234
+	Preview    string // eg This is the truncated body of a comment...
+}
+
 func getNotifications(client *http.Client) ([]Notification, error) {
 	apiClient := api.NewClientFromHTTP(client)
 	query := url.Values{}
@@ -117,7 +123,67 @@ func actualMention(client *http.Client, n Notification) (bool, error) {
 	return strings.Contains(resp.Body, "@"+currentUsername), nil
 }
 
+type IssueOrPR struct {
+	Number int
+	Title  string
+}
+
+type Event struct {
+	Type string
+	Repo struct {
+		Name string // owner/repo
+	}
+	Payload struct {
+		Action      string
+		Issue       IssueOrPR
+		PullRequest IssueOrPR `json:"pull_request"`
+		Comment     struct {
+			Body string
+		}
+	}
+}
+
+func getEvents(client *http.Client) ([]Event, error) {
+	apiClient := api.NewClientFromHTTP(client)
+	query := url.Values{}
+	query.Add("per_page", "100")
+
+	currentUsername, err := api.CurrentLoginName(apiClient, ghinstance.Default())
+	if err != nil {
+		return nil, err
+	}
+
+	var ret []Event
+	var resp []Event
+	pages := 3
+	for page := 1; page <= pages; page++ {
+		query.Add("page", fmt.Sprintf("%d", page))
+		p := fmt.Sprintf("users/%s/events?%s", currentUsername, query.Encode())
+		// TODO handle fewer pages (ie page up not down)
+		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		if err != nil {
+			return nil, fmt.Errorf("could not get events: %w", err)
+		}
+		ret = append(ret, resp...)
+	}
+
+	return ret, nil
+}
+
 func statusRun(opts *StatusOptions) error {
+	// INITIAL SECTIONS:
+	// review requests
+	// mentions
+	// assigned issues
+	// assigned PRs
+	// repo activity
+	// new issue
+	// new pr
+	// comment
+
+	// TODO
+	// - decide if assignments should come from events or search
+
 	client, err := opts.HttpClient()
 	if err != nil {
 		return fmt.Errorf("could not create client: %w", err)
@@ -127,94 +193,111 @@ func statusRun(opts *StatusOptions) error {
 		return err
 	}
 
-	mentions := []Notification{}
-	newIssues := []Notification{}
-	newPRs := []Notification{}
-	comments := []Notification{}
-	reviewRequests := []Notification{}
+	mentions := []StatusItem{}
 
 	for _, n := range ns {
-		if n.Subject.Type == "Discussion" || n.Subject.Type == "Release" {
+		if n.Reason != "mention" {
 			continue
 		}
 
-		if n.Reason == "mention" {
-			// TODO error handling
-			if actual, err := actualMention(client, n); actual && err != nil {
-				mentions = append(mentions, n)
-			} else {
-				comments = append(comments, n)
-			}
-			continue
+		// TODO error handling
+		if actual, err := actualMention(client, n); actual && err != nil {
+			mentions = append(mentions, StatusItem{
+				Repository: n.Repository.FullName,
+				Identifier: "TODO",
+				Preview:    "TODO",
+			})
 		}
-
-		if n.Subject.LatestCommentURL == "" && n.Reason == "subscribed" {
-			if n.Subject.Type == "PullRequest" {
-				newPRs = append(newPRs, n)
-			} else if n.Subject.Type == "Issue" {
-				newIssues = append(newIssues, n)
-			} else {
-				// TODO i donno
-				fmt.Printf("DBG %#v\n", n)
-			}
-			continue
-		}
-
-		if n.Reason == "review_requested" {
-			reviewRequests = append(reviewRequests, n)
-			continue
-		}
-
-		comments = append(comments, n)
 	}
-
-	// this is picking up stuff like team mentions. i should handle those explicitly.
 
 	fmt.Println("MENTIONS")
 	for _, n := range mentions {
-		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+		fmt.Printf("%s %s %s\n", n.Repository, n.Identifier, n.Preview)
 	}
 
-	fmt.Println("NEW PRs")
-	for _, n := range newPRs {
-		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	es, err := getEvents(client)
+	if err != nil {
+		return err
+	}
+
+	assignedIssues := []StatusItem{}
+	assignedPRs := []StatusItem{}
+	reviewRequests := []StatusItem{}
+	newIssues := []StatusItem{}
+	newPRs := []StatusItem{}
+	comments := []StatusItem{}
+
+	for _, e := range es {
+		switch e.Type {
+		case "IssuesEvent":
+			switch e.Payload.Action {
+			case "opened":
+				newIssues = append(newIssues, StatusItem{
+					Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+					Repository: e.Repo.Name,
+					Preview:    e.Payload.Issue.Title,
+				})
+			case "assigned":
+				assignedIssues = append(assignedIssues, StatusItem{
+					Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+					Repository: e.Repo.Name,
+					Preview:    e.Payload.Issue.Title,
+				})
+			}
+		case "PullRequestEvent":
+			switch e.Payload.Action {
+			case "opened":
+				if e.Payload.PullRequest.Title == "" {
+					fmt.Printf("DBG %#v\n", e)
+				}
+				newPRs = append(newPRs, StatusItem{
+					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
+					Repository: e.Repo.Name,
+					Preview:    e.Payload.PullRequest.Title,
+				})
+			case "review_requested":
+				reviewRequests = append(reviewRequests, StatusItem{
+					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
+					Repository: e.Repo.Name,
+					Preview:    e.Payload.PullRequest.Title,
+				})
+			case "assigned":
+				assignedPRs = append(assignedPRs, StatusItem{
+					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
+					Repository: e.Repo.Name,
+					Preview:    e.Payload.PullRequest.Title,
+				})
+			}
+		case "IssueCommentEvent":
+			body := e.Payload.Comment.Body
+			if len(body) > 20 {
+				body = body[0:20]
+			}
+			comments = append(comments, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+				Repository: e.Repo.Name,
+				Preview:    body,
+			})
+		}
 	}
 
 	fmt.Println("NEW ISSUES")
-	for _, n := range newIssues {
-		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
-	}
+	fmt.Printf("DBG %#v\n", newIssues)
 
-	fmt.Println("COMMENTS")
-	for _, n := range comments {
-		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
-	}
+	fmt.Println("NEW PRs")
+	fmt.Printf("DBG %#v\n", newPRs)
 
 	fmt.Println("REVIEW REQUESTS")
-	for _, n := range reviewRequests {
-		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
-	}
+	fmt.Printf("DBG %#v\n", reviewRequests)
 
-	// should i attempt to shoehorn all of this into a single giant graphql
-	// query? i guess everything that is in graphql should be trated that way.
+	fmt.Println("ASSIGNED PRs")
+	fmt.Printf("DBG %#v\n", assignedPRs)
 
-	// TODO review requests -- GQL search
-	// TODO pr assignments -- GQL search
-	// TODO issue assignments -- GQL search
-	// TODO discussions -- GQL search
-	// TODO mentions -- GQL, apparently. can this include discussions? continue to study mislav's extension
+	fmt.Println("ASSIGNED ISSUES")
+	fmt.Printf("DBG %#v\n", assignedIssues)
 
-	// TODO figure out if this could work:
-	// TODO repo activity -- REST
-	// I think that /users/vilmibm/events might be good enough, but need to
-	// analyze the JSON back and think about it.
+	fmt.Println("COMMENTS")
+	fmt.Printf("DBG %#v\n", comments)
 
-	// this is sadly infeasible since discussions are scoped to repo
-	// an option is to figure out what repos are active then get discussions for
-	// them, but it would be impossible to enumerate every repo a user has
-	// access to and get discussion listings.
-	// TODO discussions -- GQL query
-
-	// so this looks like i can parallel 3 requests -- two RESTs and a big ugly GQL
 	return nil
 }
