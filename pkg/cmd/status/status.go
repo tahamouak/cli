@@ -45,22 +45,6 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 	return cmd
 }
 
-/*
-• "repo activity"
-	• using notification API
-	• new issues
-	• new prs
-	• comments
-• mentions
-	• using notifications API
-• review requests
-	• using search API
-• pr assignments
-	• using search API
-• issue assignments
-	• using search API
-*/
-
 type Notification struct {
 	Reason  string
 	Subject struct {
@@ -298,6 +282,12 @@ func statusRun(opts *StatusOptions) error {
 
 	fmt.Println("COMMENTS")
 	fmt.Printf("DBG %#v\n", comments)
+
+	// TODO
+	// - first pass on formatting
+	// - switch to search API for assignments
+	// - goroutines for each network call + subsequent processing
+	// - ensure caching appropriately
 
 	return nil
 }
