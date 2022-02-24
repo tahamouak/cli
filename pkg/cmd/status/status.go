@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/ghinstance"
@@ -76,15 +78,43 @@ func getNotifications(client *http.Client) ([]Notification, error) {
 	apiClient := api.NewClientFromHTTP(client)
 	query := url.Values{}
 	query.Add("per_page", "100")
+
+	// TODO put Now in opts
+	day, _ := time.ParseDuration("24h")
+	query.Add("since", time.Now().Add(-day).Format(time.RFC3339))
+
 	// TODO might want to get multiple pages since I'm sorting the results into buckets
-	p := fmt.Sprintf("notifications?%s", query.Encode())
+	var ret []Notification
 	var resp []Notification
-	err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
-	if err != nil {
-		return nil, fmt.Errorf("could not get notifications: %w", err)
+	pages := 2
+	for page := 1; page <= pages; page++ {
+		query.Add("page", fmt.Sprintf("%d", page))
+		p := fmt.Sprintf("notifications?%s", query.Encode())
+		// behavior when only one page?
+		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		if err != nil {
+			return nil, fmt.Errorf("could not get notifications: %w", err)
+		}
+		ret = append(ret, resp...)
 	}
 
-	return resp, nil
+	return ret, nil
+}
+
+func actualMention(client *http.Client, n Notification) (bool, error) {
+	c := api.NewClientFromHTTP(client)
+	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
+	if err != nil {
+		return false, err
+	}
+	resp := struct {
+		Body string
+	}{}
+	if err := c.REST(ghinstance.Default(), "GET", n.Subject.LatestCommentURL, nil, &resp); err != nil {
+		return false, err
+	}
+
+	return strings.Contains(resp.Body, "@"+currentUsername), nil
 }
 
 func statusRun(opts *StatusOptions) error {
@@ -101,13 +131,24 @@ func statusRun(opts *StatusOptions) error {
 	newIssues := []Notification{}
 	newPRs := []Notification{}
 	comments := []Notification{}
+	reviewRequests := []Notification{}
 
 	for _, n := range ns {
-		if n.Reason == "mention" {
-			mentions = append(mentions, n)
+		if n.Subject.Type == "Discussion" || n.Subject.Type == "Release" {
 			continue
 		}
-		if n.Subject.LatestCommentURL == n.Subject.URL {
+
+		if n.Reason == "mention" {
+			// TODO error handling
+			if actual, err := actualMention(client, n); actual && err != nil {
+				mentions = append(mentions, n)
+			} else {
+				comments = append(comments, n)
+			}
+			continue
+		}
+
+		if n.Subject.LatestCommentURL == "" && n.Reason == "subscribed" {
 			if n.Subject.Type == "PullRequest" {
 				newPRs = append(newPRs, n)
 			} else if n.Subject.Type == "Issue" {
@@ -116,21 +157,43 @@ func statusRun(opts *StatusOptions) error {
 				// TODO i donno
 				fmt.Printf("DBG %#v\n", n)
 			}
-		} else {
-			comments = append(comments, n)
+			continue
 		}
+
+		if n.Reason == "review_requested" {
+			reviewRequests = append(reviewRequests, n)
+			continue
+		}
+
+		comments = append(comments, n)
 	}
 
 	// this is picking up stuff like team mentions. i should handle those explicitly.
 
 	fmt.Println("MENTIONS")
-	fmt.Printf("%#v\n", mentions)
+	for _, n := range mentions {
+		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	}
+
 	fmt.Println("NEW PRs")
-	fmt.Printf("%#v\n", newPRs)
+	for _, n := range newPRs {
+		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	}
+
 	fmt.Println("NEW ISSUES")
-	fmt.Printf("%#v\n", newIssues)
+	for _, n := range newIssues {
+		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	}
+
 	fmt.Println("COMMENTS")
-	fmt.Printf("%#v\n", comments)
+	for _, n := range comments {
+		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	}
+
+	fmt.Println("REVIEW REQUESTS")
+	for _, n := range reviewRequests {
+		fmt.Printf("%s %s %s %s %s\n", n.Reason, n.Subject.Title, n.Subject.Type, n.Subject.URL, n.Subject.LatestCommentURL)
+	}
 
 	// should i attempt to shoehorn all of this into a single giant graphql
 	// query? i guess everything that is in graphql should be trated that way.
