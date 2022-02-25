@@ -154,6 +154,70 @@ func getEvents(client *http.Client) ([]Event, error) {
 	return ret, nil
 }
 
+type SearchResult struct {
+	Type       string `json:"__typename"`
+	UpdatedAt  time.Time
+	Title      string
+	Number     int
+	Repository struct {
+		NameWithOwner string
+	}
+}
+
+type Assignments struct {
+	PRs    []SearchResult
+	Issues []SearchResult
+}
+
+func getAssignments(client *http.Client) (*Assignments, error) {
+	q := `
+	query AssignedSearch {
+	  search(first: 100, type: ISSUE, query:"assignee:@me") {
+		  edges {
+		  node {
+			...on Issue {
+			  __typename
+			  updatedAt
+			  title
+			  number
+			  repository {
+				nameWithOwner
+			  }
+			}
+			...on PullRequest {
+			  updatedAt
+			  __typename
+			  title
+			  number
+			  repository {
+				nameWithOwner
+			  }
+			}
+		  }
+		}
+	  }
+	}`
+	apiClient := api.NewClientFromHTTP(client)
+
+	var resp struct {
+		Data []SearchResult
+	}
+	err := apiClient.GraphQL(ghinstance.Default(), q, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("could not search for assignments: %w", err)
+	}
+
+	// TODO why is this broken
+
+	// sort stuff
+
+	fmt.Println("HEYOOOO")
+	fmt.Printf("DBG %#v\n", resp)
+
+	// TODO
+	return nil, nil
+}
+
 func statusRun(opts *StatusOptions) error {
 	// INITIAL SECTIONS:
 	// review requests
@@ -282,6 +346,11 @@ func statusRun(opts *StatusOptions) error {
 
 	fmt.Println("COMMENTS")
 	fmt.Printf("DBG %#v\n", comments)
+
+	_, err = getAssignments(client)
+	if err != nil {
+		return err
+	}
 
 	// TODO
 	// - first pass on formatting
