@@ -320,11 +320,6 @@ func statusRun(opts *StatusOptions) error {
 		}
 	}
 
-	fmt.Println("MENTIONS")
-	for _, n := range mentions {
-		fmt.Printf("%s %s %s\n", n.Repository, n.Identifier, n.Preview)
-	}
-
 	es, err := getEvents(client)
 	if err != nil {
 		return err
@@ -349,9 +344,6 @@ func statusRun(opts *StatusOptions) error {
 		case "PullRequestEvent":
 			switch e.Payload.Action {
 			case "opened":
-				if e.Payload.PullRequest.Title == "" {
-					fmt.Printf("DBG %#v\n", e)
-				}
 				newPRs = append(newPRs, StatusItem{
 					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
 					Repository: e.Repo.Name,
@@ -385,17 +377,6 @@ func statusRun(opts *StatusOptions) error {
 		return err
 	}
 
-	fmt.Println("ASSIGNED PRs")
-	fmt.Printf("DBG %#v\n", results.AssignedPRs)
-
-	fmt.Println("ASSIGNED ISSUES")
-	fmt.Printf("DBG %#v\n", results.AssignedIssues)
-
-	// TODO
-	// - first pass on formatting
-	// - goroutines for each network call + subsequent processing
-	// - ensure caching appropriately
-
 	out := opts.IO.Out
 
 	titleStyle := lipgloss.NewStyle().Width(opts.IO.TerminalWidth()).
@@ -408,28 +389,19 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(out, titleStyle.Render(g))
 	fmt.Fprintln(out)
 
-	// thoughts on formatting
-
-	// Given enough space, this layout:
-	// Assigned PRs     Assigned Issue
-	// Review Requests  Mentions
-	// Repo Activity
-
-	// Linebreak the top row if not enough space
-
-	// could exploit table printer to just fake multiple tables on same line
+	halfWidth := (opts.IO.TerminalWidth() / 2) - 2
 
 	idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF"))
 	nothingStyle := lipgloss.NewStyle().Italic(true)
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	halfStyle := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).Width(50)
+	halfStyle := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).Width(halfWidth)
 	maxLen := 5
 
 	prOut := &bytes.Buffer{}
 	fmt.Fprintln(prOut, headerStyle.Render("Assigned PRs"))
 	prTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: 50,
+		MaxWidth: halfWidth,
 		Out:      prOut,
 	})
 
@@ -452,7 +424,7 @@ func statusRun(opts *StatusOptions) error {
 
 	rrTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: 50,
+		MaxWidth: halfWidth,
 		Out:      rrOut,
 	})
 
@@ -483,7 +455,7 @@ func statusRun(opts *StatusOptions) error {
 
 	aiTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: 50,
+		MaxWidth: halfWidth,
 		Out:      aiOut,
 	})
 
@@ -513,7 +485,7 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(mOut, headerStyle.Render("Mentions"))
 	mTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: 50,
+		MaxWidth: halfWidth,
 		Out:      mOut,
 	})
 
@@ -546,6 +518,17 @@ func statusRun(opts *StatusOptions) error {
 
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
+
+	// TODO
+	// - prep repo activity
+	// - print repo activity
+	// - evaluate formatting/lipgloss use
+	// - go/no-go on greeting
+	// - goroutines for each network call + subsequent processing
+	// - ensure caching appropriately
+
+	// Prep repo activity
+	//repoActivity := []statusItem{}
 
 	return nil
 }
