@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +21,13 @@ type StatusOptions struct {
 	HttpClient      func() (*http.Client, error)
 	HasRepoOverride bool
 	Org             string
+	IO              iostreams.IOStreams
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{}
 	opts.HttpClient = f.HttpClient
+	opts.IO = *f.IOStreams
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Print information about relevant issues, pull requests, and notifications across repositories",
@@ -200,22 +204,52 @@ func getAssignments(client *http.Client) (*Assignments, error) {
 	apiClient := api.NewClientFromHTTP(client)
 
 	var resp struct {
-		Data []SearchResult
+		Search struct {
+			Edges []struct {
+				Node SearchResult
+			}
+		}
 	}
 	err := apiClient.GraphQL(ghinstance.Default(), q, nil, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("could not search for assignments: %w", err)
 	}
 
-	// TODO why is this broken
+	prs := []SearchResult{}
+	issues := []SearchResult{}
 
-	// sort stuff
+	for _, e := range resp.Search.Edges {
+		if e.Node.Type == "Issue" {
+			issues = append(issues, e.Node)
+		} else if e.Node.Type == "PullRequest" {
+			prs = append(prs, e.Node)
+		} else {
+			panic("you shouldn't be here")
+		}
+	}
 
-	fmt.Println("HEYOOOO")
-	fmt.Printf("DBG %#v\n", resp)
+	sort.Sort(SearchResults(issues))
+	sort.Sort(SearchResults(prs))
 
-	// TODO
-	return nil, nil
+	return &Assignments{
+		Issues: issues,
+		PRs:    prs,
+	}, nil
+
+}
+
+type SearchResults []SearchResult
+
+func (rs SearchResults) Len() int {
+	return len(rs)
+}
+
+func (rs SearchResults) Less(i, j int) bool {
+	return rs[i].UpdatedAt.Before(rs[j].UpdatedAt)
+}
+
+func (rs SearchResults) Swap(i, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
 }
 
 func statusRun(opts *StatusOptions) error {
@@ -338,25 +372,41 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Println("REVIEW REQUESTS")
 	fmt.Printf("DBG %#v\n", reviewRequests)
 
-	fmt.Println("ASSIGNED PRs")
-	fmt.Printf("DBG %#v\n", assignedPRs)
-
-	fmt.Println("ASSIGNED ISSUES")
-	fmt.Printf("DBG %#v\n", assignedIssues)
-
 	fmt.Println("COMMENTS")
 	fmt.Printf("DBG %#v\n", comments)
 
-	_, err = getAssignments(client)
+	assignments, err := getAssignments(client)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("ASSIGNED PRs")
+	fmt.Printf("DBG %#v\n", assignments.PRs)
+
+	fmt.Println("ASSIGNED ISSUES")
+	fmt.Printf("DBG %#v\n", assignments.Issues)
+
 	// TODO
 	// - first pass on formatting
-	// - switch to search API for assignments
 	// - goroutines for each network call + subsequent processing
 	// - ensure caching appropriately
 
+	out := opts.IO.Out
+
+	c := api.NewClientFromHTTP(client)
+	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
+
+	now := time.Now().Local()
+
+	fmt.Fprintf(out, greeting(currentUsername, now)+"\n")
+
 	return nil
+}
+
+func greeting(name string, now time.Time) string {
+
+	// TODO figure out how to compute time greeting
+
+	return "TODO"
+
 }
