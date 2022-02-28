@@ -1,6 +1,7 @@
 package status
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
+	"github.com/cli/cli/v2/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -168,15 +171,16 @@ type SearchResult struct {
 	}
 }
 
-type Assignments struct {
-	PRs    []SearchResult
-	Issues []SearchResult
+type SearchResults struct {
+	AssignedPRs    []SearchResult
+	AssignedIssues []SearchResult
+	ReviewRequests []SearchResult
 }
 
-func getAssignments(client *http.Client) (*Assignments, error) {
+func doSearch(client *http.Client) (*SearchResults, error) {
 	q := `
 	query AssignedSearch {
-	  search(first: 100, type: ISSUE, query:"assignee:@me") {
+	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open") {
 		  edges {
 		  node {
 			...on Issue {
@@ -200,11 +204,31 @@ func getAssignments(client *http.Client) (*Assignments, error) {
 		  }
 		}
 	  }
+	  reviewRequested: search(first: 25, type: ISSUE, query:"state:open review-requested:@me") {
+		  edges {
+			  node {
+				...on PullRequest {
+				  updatedAt
+				  __typename
+				  title
+				  number
+				  repository {
+					nameWithOwner
+				  }
+				}
+			  }
+		  }
+	  }
 	}`
 	apiClient := api.NewClientFromHTTP(client)
 
 	var resp struct {
-		Search struct {
+		Assignments struct {
+			Edges []struct {
+				Node SearchResult
+			}
+		}
+		ReviewRequested struct {
 			Edges []struct {
 				Node SearchResult
 			}
@@ -217,8 +241,9 @@ func getAssignments(client *http.Client) (*Assignments, error) {
 
 	prs := []SearchResult{}
 	issues := []SearchResult{}
+	reviewRequested := []SearchResult{}
 
-	for _, e := range resp.Search.Edges {
+	for _, e := range resp.Assignments.Edges {
 		if e.Node.Type == "Issue" {
 			issues = append(issues, e.Node)
 		} else if e.Node.Type == "PullRequest" {
@@ -228,27 +253,33 @@ func getAssignments(client *http.Client) (*Assignments, error) {
 		}
 	}
 
-	sort.Sort(SearchResults(issues))
-	sort.Sort(SearchResults(prs))
+	for _, e := range resp.ReviewRequested.Edges {
+		reviewRequested = append(reviewRequested, e.Node)
+	}
 
-	return &Assignments{
-		Issues: issues,
-		PRs:    prs,
+	sort.Sort(Results(issues))
+	sort.Sort(Results(prs))
+	sort.Sort(Results(reviewRequested))
+
+	return &SearchResults{
+		AssignedIssues: issues,
+		AssignedPRs:    prs,
+		ReviewRequests: reviewRequested,
 	}, nil
 
 }
 
-type SearchResults []SearchResult
+type Results []SearchResult
 
-func (rs SearchResults) Len() int {
+func (rs Results) Len() int {
 	return len(rs)
 }
 
-func (rs SearchResults) Less(i, j int) bool {
-	return rs[i].UpdatedAt.Before(rs[j].UpdatedAt)
+func (rs Results) Less(i, j int) bool {
+	return rs[i].UpdatedAt.After(rs[j].UpdatedAt)
 }
 
-func (rs SearchResults) Swap(i, j int) {
+func (rs Results) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 
@@ -262,9 +293,6 @@ func statusRun(opts *StatusOptions) error {
 	// new issue
 	// new pr
 	// comment
-
-	// TODO
-	// - decide if assignments should come from events or search
 
 	client, err := opts.HttpClient()
 	if err != nil {
@@ -302,25 +330,17 @@ func statusRun(opts *StatusOptions) error {
 		return err
 	}
 
-	assignedIssues := []StatusItem{}
-	assignedPRs := []StatusItem{}
-	reviewRequests := []StatusItem{}
 	newIssues := []StatusItem{}
 	newPRs := []StatusItem{}
 	comments := []StatusItem{}
 
+	// TODO cleanup switches
 	for _, e := range es {
 		switch e.Type {
 		case "IssuesEvent":
 			switch e.Payload.Action {
 			case "opened":
 				newIssues = append(newIssues, StatusItem{
-					Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-					Repository: e.Repo.Name,
-					Preview:    e.Payload.Issue.Title,
-				})
-			case "assigned":
-				assignedIssues = append(assignedIssues, StatusItem{
 					Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
 					Repository: e.Repo.Name,
 					Preview:    e.Payload.Issue.Title,
@@ -333,18 +353,6 @@ func statusRun(opts *StatusOptions) error {
 					fmt.Printf("DBG %#v\n", e)
 				}
 				newPRs = append(newPRs, StatusItem{
-					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
-					Repository: e.Repo.Name,
-					Preview:    e.Payload.PullRequest.Title,
-				})
-			case "review_requested":
-				reviewRequests = append(reviewRequests, StatusItem{
-					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
-					Repository: e.Repo.Name,
-					Preview:    e.Payload.PullRequest.Title,
-				})
-			case "assigned":
-				assignedPRs = append(assignedPRs, StatusItem{
 					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
 					Repository: e.Repo.Name,
 					Preview:    e.Payload.PullRequest.Title,
@@ -369,22 +377,19 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Println("NEW PRs")
 	fmt.Printf("DBG %#v\n", newPRs)
 
-	fmt.Println("REVIEW REQUESTS")
-	fmt.Printf("DBG %#v\n", reviewRequests)
-
 	fmt.Println("COMMENTS")
 	fmt.Printf("DBG %#v\n", comments)
 
-	assignments, err := getAssignments(client)
+	results, err := doSearch(client)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("ASSIGNED PRs")
-	fmt.Printf("DBG %#v\n", assignments.PRs)
+	fmt.Printf("DBG %#v\n", results.AssignedPRs)
 
 	fmt.Println("ASSIGNED ISSUES")
-	fmt.Printf("DBG %#v\n", assignments.Issues)
+	fmt.Printf("DBG %#v\n", results.AssignedIssues)
 
 	// TODO
 	// - first pass on formatting
@@ -393,20 +398,168 @@ func statusRun(opts *StatusOptions) error {
 
 	out := opts.IO.Out
 
-	c := api.NewClientFromHTTP(client)
-	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
+	titleStyle := lipgloss.NewStyle().Width(opts.IO.TerminalWidth()).
+		Align(lipgloss.Center).Bold(true).Underline(true)
 
-	now := time.Now().Local()
+	g, err := greeting(client)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, titleStyle.Render(g))
+	fmt.Fprintln(out)
 
-	fmt.Fprintf(out, greeting(currentUsername, now)+"\n")
+	// thoughts on formatting
+
+	// Given enough space, this layout:
+	// Assigned PRs     Assigned Issue
+	// Review Requests  Mentions
+	// Repo Activity
+
+	// Linebreak the top row if not enough space
+
+	// could exploit table printer to just fake multiple tables on same line
+
+	idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF"))
+	nothingStyle := lipgloss.NewStyle().Italic(true)
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	halfStyle := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).Width(50)
+	maxLen := 5
+
+	prOut := &bytes.Buffer{}
+	fmt.Fprintln(prOut, headerStyle.Render("Assigned PRs"))
+	prTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+		IsTTY:    opts.IO.IsStdoutTTY(),
+		MaxWidth: 50,
+		Out:      prOut,
+	})
+
+	for i, pr := range results.AssignedPRs {
+		if i == maxLen {
+			break
+		}
+		prTP.AddField(
+			fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number),
+			nil,
+			func(s string) string { return idStyle.Render(s) })
+		prTP.AddField(pr.Title, nil, nil)
+		prTP.EndRow()
+	}
+
+	prTP.Render()
+
+	rrOut := &bytes.Buffer{}
+	fmt.Fprintln(rrOut, headerStyle.Render("Review Requests"))
+
+	rrTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+		IsTTY:    opts.IO.IsStdoutTTY(),
+		MaxWidth: 50,
+		Out:      rrOut,
+	})
+
+	if len(results.ReviewRequests) > 0 {
+		for i, rr := range results.ReviewRequests {
+			if i == maxLen {
+				break
+			}
+			rrTP.AddField(
+				fmt.Sprintf("%s#%d", rr.Repository.NameWithOwner, rr.Number),
+				nil,
+				func(s string) string { return idStyle.Render(s) })
+			rrTP.AddField(rr.Title, nil, nil)
+			rrTP.EndRow()
+		}
+	} else {
+		rrTP.AddField(
+			"Nothing here ^_^",
+			nil,
+			func(s string) string { return nothingStyle.Render(s) },
+		)
+	}
+
+	rrTP.Render()
+
+	aiOut := &bytes.Buffer{}
+	fmt.Fprintln(aiOut, headerStyle.Render("Assigned Issues"))
+
+	aiTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+		IsTTY:    opts.IO.IsStdoutTTY(),
+		MaxWidth: 50,
+		Out:      aiOut,
+	})
+
+	if len(results.ReviewRequests) > 0 {
+		for i, ai := range results.AssignedIssues {
+			if i == maxLen {
+				break
+			}
+			aiTP.AddField(
+				fmt.Sprintf("%s#%d", ai.Repository.NameWithOwner, ai.Number),
+				nil,
+				func(s string) string { return idStyle.Render(s) })
+			aiTP.AddField(ai.Title, nil, nil)
+			aiTP.EndRow()
+		}
+	} else {
+		aiTP.AddField(
+			"Nothing here ^_^",
+			nil,
+			func(s string) string { return nothingStyle.Render(s) },
+		)
+	}
+
+	aiTP.Render()
+
+	mOut := &bytes.Buffer{}
+	fmt.Fprintln(mOut, headerStyle.Render("Mentions"))
+	mTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+		IsTTY:    opts.IO.IsStdoutTTY(),
+		MaxWidth: 50,
+		Out:      mOut,
+	})
+
+	if len(mentions) > 0 {
+		for i, m := range mentions {
+			if i == maxLen {
+				break
+			}
+			mTP.AddField(
+				fmt.Sprintf("%s#%s", m.Repository, m.Identifier),
+				nil,
+				func(s string) string { return idStyle.Render(s) })
+			mTP.AddField(m.Preview, nil, nil)
+			mTP.EndRow()
+		}
+	} else {
+		mTP.AddField(
+			"Nothing here ^_^",
+			nil,
+			func(s string) string { return nothingStyle.Render(s) },
+		)
+	}
+
+	mTP.Render()
+
+	mentionsP := halfStyle.Render(mOut.String())
+	reviewRequestsP := halfStyle.Render(rrOut.String())
+	assignedPRsP := halfStyle.Render(prOut.String())
+	assignedIssuesP := halfStyle.Render(aiOut.String())
+
+	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
+	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
 
 	return nil
 }
 
-func greeting(name string, now time.Time) string {
+func greeting(client *http.Client) (string, error) {
+	c := api.NewClientFromHTTP(client)
+	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
+	if err != nil {
+		return "", err
+	}
 
 	// TODO figure out how to compute time greeting
+	//now := time.Now().Local()
 
-	return "TODO"
+	return fmt.Sprintf("good TODO, %s", currentUsername), nil
 
 }
