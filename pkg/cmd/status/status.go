@@ -374,18 +374,18 @@ func statusRun(opts *StatusOptions) error {
 		return err
 	}
 
+	cs := opts.IO.ColorScheme()
 	out := opts.IO.Out
 
 	halfWidth := (opts.IO.TerminalWidth() / 2) - 2
 
-	idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF"))
-	nothingStyle := lipgloss.NewStyle().Italic(true)
-	headerStyle := lipgloss.NewStyle().Bold(true)
+	idStyle := cs.Cyan
+	headerStyle := cs.Bold
 	halfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
 	prOut := &bytes.Buffer{}
-	fmt.Fprintln(prOut, headerStyle.Render("Assigned PRs"))
+	fmt.Fprintln(prOut, headerStyle("Assigned PRs"))
 	prTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
 		MaxWidth: halfWidth,
@@ -398,8 +398,7 @@ func statusRun(opts *StatusOptions) error {
 		}
 		prTP.AddField(
 			fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number),
-			nil,
-			func(s string) string { return idStyle.Render(s) })
+			nil, idStyle)
 		prTP.AddField(pr.Title, nil, nil)
 		prTP.EndRow()
 	}
@@ -407,7 +406,7 @@ func statusRun(opts *StatusOptions) error {
 	prTP.Render()
 
 	rrOut := &bytes.Buffer{}
-	fmt.Fprintln(rrOut, headerStyle.Render("Review Requests"))
+	fmt.Fprintln(rrOut, headerStyle("Review Requests"))
 
 	rrTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
@@ -422,23 +421,18 @@ func statusRun(opts *StatusOptions) error {
 			}
 			rrTP.AddField(
 				fmt.Sprintf("%s#%d", rr.Repository.NameWithOwner, rr.Number),
-				nil,
-				func(s string) string { return idStyle.Render(s) })
+				nil, idStyle)
 			rrTP.AddField(rr.Title, nil, nil)
 			rrTP.EndRow()
 		}
 	} else {
-		rrTP.AddField(
-			"Nothing here ^_^",
-			nil,
-			func(s string) string { return nothingStyle.Render(s) },
-		)
+		rrTP.AddField("Nothing here ^_^", nil, nil)
 	}
 
 	rrTP.Render()
 
 	aiOut := &bytes.Buffer{}
-	fmt.Fprintln(aiOut, headerStyle.Render("Assigned Issues"))
+	fmt.Fprintln(aiOut, headerStyle("Assigned Issues"))
 
 	aiTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
@@ -453,23 +447,18 @@ func statusRun(opts *StatusOptions) error {
 			}
 			aiTP.AddField(
 				fmt.Sprintf("%s#%d", ai.Repository.NameWithOwner, ai.Number),
-				nil,
-				func(s string) string { return idStyle.Render(s) })
+				nil, idStyle)
 			aiTP.AddField(ai.Title, nil, nil)
 			aiTP.EndRow()
 		}
 	} else {
-		aiTP.AddField(
-			"Nothing here ^_^",
-			nil,
-			func(s string) string { return nothingStyle.Render(s) },
-		)
+		aiTP.AddField("Nothing here ^_^", nil, nil)
 	}
 
 	aiTP.Render()
 
 	mOut := &bytes.Buffer{}
-	fmt.Fprintln(mOut, headerStyle.Render("Mentions"))
+	fmt.Fprintln(mOut, headerStyle("Mentions"))
 	mTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
 		MaxWidth: halfWidth,
@@ -483,17 +472,12 @@ func statusRun(opts *StatusOptions) error {
 			}
 			mTP.AddField(
 				fmt.Sprintf("%s#%s", m.Repository, m.Identifier),
-				nil,
-				func(s string) string { return idStyle.Render(s) })
+				nil, idStyle)
 			mTP.AddField(m.Preview, nil, nil)
 			mTP.EndRow()
 		}
 	} else {
-		mTP.AddField(
-			"Nothing here ^_^",
-			nil,
-			func(s string) string { return nothingStyle.Render(s) },
-		)
+		mTP.AddField("Nothing here ^_^", nil, nil)
 	}
 
 	mTP.Render()
@@ -514,7 +498,7 @@ func statusRun(opts *StatusOptions) error {
 	// - do a version of this where lipgloss is only used for horizontal alignment
 	// - do a version without lipgloss
 
-	fmt.Fprintln(mOut, headerStyle.Render("Mentions"))
+	fmt.Fprintln(mOut, headerStyle("Mentions"))
 	raTP := utils.NewTablePrinter(&opts.IO)
 
 	for i, ra := range repoActivity {
@@ -523,12 +507,12 @@ func statusRun(opts *StatusOptions) error {
 		}
 		raTP.AddField(ra.Repository, nil, nil)
 		raTP.AddField(ra.Reason, nil, nil)
-		raTP.AddField(ra.Identifier, nil, func(s string) string { return idStyle.Render(s) })
+		raTP.AddField(ra.Identifier, nil, idStyle)
 		raTP.AddField(ra.Preview, nil, nil)
 		raTP.EndRow()
 	}
 
-	fmt.Fprintln(out, headerStyle.Render("Repository Activity"))
+	fmt.Fprintln(out, headerStyle("Repository Activity"))
 
 	raTP.Render()
 
