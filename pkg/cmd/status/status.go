@@ -69,6 +69,7 @@ type StatusItem struct {
 	Repository string // owner/repo
 	Identifier string // eg cli/cli#1234
 	Preview    string // eg This is the truncated body of a comment...
+	Reason     string // only used in repo activity
 }
 
 func getNotifications(client *http.Client) ([]Notification, error) {
@@ -120,8 +121,9 @@ type IssueOrPR struct {
 }
 
 type Event struct {
-	Type string
-	Repo struct {
+	Type      string
+	CreatedAt time.Time `json:"created_at"`
+	Repo      struct {
 		Name string // owner/repo
 	}
 	Payload struct {
@@ -129,7 +131,8 @@ type Event struct {
 		Issue       IssueOrPR
 		PullRequest IssueOrPR `json:"pull_request"`
 		Comment     struct {
-			Body string
+			Body    string
+			HTMLURL string `json:"html_url"`
 		}
 	}
 }
@@ -325,52 +328,46 @@ func statusRun(opts *StatusOptions) error {
 		return err
 	}
 
-	newIssues := []StatusItem{}
-	newPRs := []StatusItem{}
-	comments := []StatusItem{}
+	repoActivity := []StatusItem{}
 
-	// TODO cleanup switches
 	for _, e := range es {
 		switch e.Type {
 		case "IssuesEvent":
-			switch e.Payload.Action {
-			case "opened":
-				newIssues = append(newIssues, StatusItem{
-					Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-					Repository: e.Repo.Name,
-					Preview:    e.Payload.Issue.Title,
-				})
+			if e.Payload.Action != "opened" {
+				continue
 			}
+			repoActivity = append(repoActivity, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+				Repository: e.Repo.Name,
+				Preview:    e.Payload.Issue.Title,
+				Reason:     "new issue",
+			})
 		case "PullRequestEvent":
-			switch e.Payload.Action {
-			case "opened":
-				newPRs = append(newPRs, StatusItem{
-					Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
-					Repository: e.Repo.Name,
-					Preview:    e.Payload.PullRequest.Title,
-				})
+			if e.Payload.Action != "opened" {
+				continue
 			}
+			repoActivity = append(repoActivity, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
+				Repository: e.Repo.Name,
+				Preview:    e.Payload.PullRequest.Title,
+				Reason:     "new PR",
+			})
 		case "IssueCommentEvent":
-			body := e.Payload.Comment.Body
-			if len(body) > 20 {
-				body = body[0:20]
+			body := strings.ReplaceAll(e.Payload.Comment.Body, "\r", "")
+			body = strings.ReplaceAll(body, "\n", " ")
+			reason := "issue comment"
+			// I'm so sorry
+			if strings.Contains(e.Payload.Comment.HTMLURL, `/pull/`) {
+				reason = "PR comment"
 			}
-			comments = append(comments, StatusItem{
+			repoActivity = append(repoActivity, StatusItem{
 				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
 				Repository: e.Repo.Name,
 				Preview:    body,
+				Reason:     reason,
 			})
 		}
 	}
-
-	fmt.Println("NEW ISSUES")
-	fmt.Printf("DBG %#v\n", newIssues)
-
-	fmt.Println("NEW PRs")
-	fmt.Printf("DBG %#v\n", newPRs)
-
-	fmt.Println("COMMENTS")
-	fmt.Printf("DBG %#v\n", comments)
 
 	results, err := doSearch(client)
 	if err != nil {
@@ -379,22 +376,12 @@ func statusRun(opts *StatusOptions) error {
 
 	out := opts.IO.Out
 
-	titleStyle := lipgloss.NewStyle().Width(opts.IO.TerminalWidth()).
-		Align(lipgloss.Center).Bold(true).Underline(true)
-
-	g, err := greeting(client)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintln(out, titleStyle.Render(g))
-	fmt.Fprintln(out)
-
 	halfWidth := (opts.IO.TerminalWidth() / 2) - 2
 
 	idStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00FFFF"))
 	nothingStyle := lipgloss.NewStyle().Italic(true)
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	halfStyle := lipgloss.NewStyle().BorderStyle(lipgloss.NormalBorder()).Width(halfWidth)
+	halfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
 	prOut := &bytes.Buffer{}
@@ -520,29 +507,30 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
 
 	// TODO
-	// - prep repo activity
-	// - print repo activity
 	// - evaluate formatting/lipgloss use
 	// - go/no-go on greeting
 	// - goroutines for each network call + subsequent processing
 	// - ensure caching appropriately
+	// - do a version of this where lipgloss is only used for horizontal alignment
+	// - do a version without lipgloss
 
-	// Prep repo activity
-	//repoActivity := []statusItem{}
+	fmt.Fprintln(mOut, headerStyle.Render("Mentions"))
+	raTP := utils.NewTablePrinter(&opts.IO)
 
-	return nil
-}
-
-func greeting(client *http.Client) (string, error) {
-	c := api.NewClientFromHTTP(client)
-	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
-	if err != nil {
-		return "", err
+	for i, ra := range repoActivity {
+		if i >= 10 {
+			break
+		}
+		raTP.AddField(ra.Repository, nil, nil)
+		raTP.AddField(ra.Reason, nil, nil)
+		raTP.AddField(ra.Identifier, nil, func(s string) string { return idStyle.Render(s) })
+		raTP.AddField(ra.Preview, nil, nil)
+		raTP.EndRow()
 	}
 
-	// TODO figure out how to compute time greeting
-	//now := time.Now().Local()
+	fmt.Fprintln(out, headerStyle.Render("Repository Activity"))
 
-	return fmt.Sprintf("good TODO, %s", currentUsername), nil
+	raTP.Render()
 
+	return nil
 }
