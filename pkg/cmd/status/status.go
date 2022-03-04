@@ -264,6 +264,8 @@ func doSearch(client *http.Client) (*SearchResults, error) {
 	sort.Sort(Results(prs))
 	sort.Sort(Results(reviewRequested))
 
+	// TODO convert to Status Items
+
 	return &SearchResults{
 		AssignedIssues: issues,
 		AssignedPRs:    prs,
@@ -384,78 +386,40 @@ func statusRun(opts *StatusOptions) error {
 	halfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
-	prOut := &bytes.Buffer{}
-	fmt.Fprintln(prOut, headerStyle("Assigned PRs"))
-	prTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
-		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: halfWidth,
-		Out:      prOut,
-	})
-
-	for i, pr := range results.AssignedPRs {
-		if i == maxLen {
-			break
-		}
-		prTP.AddField(
-			fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number),
-			nil, idStyle)
-		prTP.AddField(pr.Title, nil, nil)
-		prTP.EndRow()
-	}
-
-	prTP.Render()
-
-	rrOut := &bytes.Buffer{}
-	fmt.Fprintln(rrOut, headerStyle("Review Requests"))
-
-	rrTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
-		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: halfWidth,
-		Out:      rrOut,
-	})
-
-	if len(results.ReviewRequests) > 0 {
-		for i, rr := range results.ReviewRequests {
-			if i == maxLen {
-				break
+	// TODO rename to renderSection; take a list of status items
+	// TODO use this for mentions once above is done
+	renderSearchResults := func(header string, results []SearchResult) string {
+		tableOut := &bytes.Buffer{}
+		fmt.Fprintln(tableOut, headerStyle(header))
+		tp := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+			IsTTY:    opts.IO.IsStdoutTTY(),
+			MaxWidth: halfWidth,
+			Out:      tableOut,
+		})
+		if len(results) == 0 {
+			tp.AddField("Nothing here ^_^", nil, nil)
+			tp.EndRow()
+		} else {
+			for i, r := range results {
+				if i == maxLen {
+					break
+				}
+				tp.AddField(
+					fmt.Sprintf("%s#%d", r.Repository.NameWithOwner, r.Number),
+					nil, idStyle)
+				tp.AddField(r.Title, nil, nil)
+				tp.EndRow()
 			}
-			rrTP.AddField(
-				fmt.Sprintf("%s#%d", rr.Repository.NameWithOwner, rr.Number),
-				nil, idStyle)
-			rrTP.AddField(rr.Title, nil, nil)
-			rrTP.EndRow()
 		}
-	} else {
-		rrTP.AddField("Nothing here ^_^", nil, nil)
+
+		tp.Render()
+
+		return tableOut.String()
 	}
 
-	rrTP.Render()
-
-	aiOut := &bytes.Buffer{}
-	fmt.Fprintln(aiOut, headerStyle("Assigned Issues"))
-
-	aiTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
-		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: halfWidth,
-		Out:      aiOut,
-	})
-
-	if len(results.ReviewRequests) > 0 {
-		for i, ai := range results.AssignedIssues {
-			if i == maxLen {
-				break
-			}
-			aiTP.AddField(
-				fmt.Sprintf("%s#%d", ai.Repository.NameWithOwner, ai.Number),
-				nil, idStyle)
-			aiTP.AddField(ai.Title, nil, nil)
-			aiTP.EndRow()
-		}
-	} else {
-		aiTP.AddField("Nothing here ^_^", nil, nil)
-	}
-
-	aiTP.Render()
+	prSection := renderSearchResults("Assigned PRs", results.AssignedPRs)
+	issuesSection := renderSearchResults("Assigned Issues", results.AssignedIssues)
+	reviewSection := renderSearchResults("Review Requests", results.ReviewRequests)
 
 	mOut := &bytes.Buffer{}
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
@@ -483,9 +447,9 @@ func statusRun(opts *StatusOptions) error {
 	mTP.Render()
 
 	mentionsP := halfStyle.Render(mOut.String())
-	reviewRequestsP := halfStyle.Render(rrOut.String())
-	assignedPRsP := halfStyle.Render(prOut.String())
-	assignedIssuesP := halfStyle.Render(aiOut.String())
+	reviewRequestsP := halfStyle.Render(reviewSection)
+	assignedPRsP := halfStyle.Render(prSection)
+	assignedIssuesP := halfStyle.Render(issuesSection)
 
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
