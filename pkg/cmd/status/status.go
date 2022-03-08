@@ -24,13 +24,13 @@ type StatusOptions struct {
 	HttpClient      func() (*http.Client, error)
 	HasRepoOverride bool
 	Org             string
-	IO              iostreams.IOStreams
+	IO              *iostreams.IOStreams
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{}
 	opts.HttpClient = f.HttpClient
-	opts.IO = *f.IOStreams
+	opts.IO = f.IOStreams
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Print information about relevant issues, pull requests, and notifications across repositories",
@@ -389,7 +389,8 @@ func statusRun(opts *StatusOptions) error {
 
 	idStyle := cs.Cyan
 	headerStyle := cs.Bold
-	halfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
+	leftHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0).BorderRight(true).BorderStyle(lipgloss.NormalBorder())
+	rightHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
 	// TODO rename to renderSection; take a list of status items
@@ -397,7 +398,7 @@ func statusRun(opts *StatusOptions) error {
 	renderSearchResults := func(header string, results []SearchResult) string {
 		tableOut := &bytes.Buffer{}
 		fmt.Fprintln(tableOut, headerStyle(header))
-		tp := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+		tp := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
 			IsTTY:    opts.IO.IsStdoutTTY(),
 			MaxWidth: halfWidth,
 			Out:      tableOut,
@@ -429,7 +430,7 @@ func statusRun(opts *StatusOptions) error {
 
 	mOut := &bytes.Buffer{}
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
-	mTP := utils.NewTablePrinterWithOptions(&opts.IO, utils.TablePrinterOptions{
+	mTP := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
 		IsTTY:    opts.IO.IsStdoutTTY(),
 		MaxWidth: halfWidth,
 		Out:      mOut,
@@ -452,10 +453,10 @@ func statusRun(opts *StatusOptions) error {
 
 	mTP.Render()
 
-	mentionsP := halfStyle.Render(mOut.String())
-	reviewRequestsP := halfStyle.Render(reviewSection)
-	assignedPRsP := halfStyle.Render(prSection)
-	assignedIssuesP := halfStyle.Render(issuesSection)
+	mentionsP := rightHalfStyle.Render(mOut.String())
+	reviewRequestsP := leftHalfStyle.Render(reviewSection)
+	assignedPRsP := rightHalfStyle.Render(prSection)
+	assignedIssuesP := leftHalfStyle.Render(issuesSection)
 
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
@@ -465,7 +466,7 @@ func statusRun(opts *StatusOptions) error {
 	// - ensure caching appropriately
 
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
-	raTP := utils.NewTablePrinter(&opts.IO)
+	raTP := utils.NewTablePrinter(opts.IO)
 
 	for i, ra := range repoActivity {
 		if i >= 10 {
