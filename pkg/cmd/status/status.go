@@ -49,6 +49,12 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 		},
 	}
 
+	cmd.Flags().StringVarP(&opts.Org, "org", "o", "", "Report status within an organization")
+
+	// TODO ability to run for an org
+	// TODO ability to exclude repositories
+	// TODO? ability to filter to single repository
+
 	return cmd
 }
 
@@ -299,16 +305,6 @@ func (rs Results) Swap(i, j int) {
 }
 
 func statusRun(opts *StatusOptions) error {
-	// INITIAL SECTIONS:
-	// assigned issues
-	// assigned PRs
-	// review requests
-	// mentions
-	// repo activity
-	// 	new issue
-	// 	new pr
-	// 	comment
-
 	client, err := opts.HttpClient()
 	if err != nil {
 		return fmt.Errorf("could not create client: %w", err)
