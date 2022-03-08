@@ -68,12 +68,12 @@ type Notification struct {
 type StatusItem struct {
 	Repository string // owner/repo
 	Identifier string // eg cli/cli#1234
-	preview    string // eg This is the truncated body of a comment...
+	preview    string // eg This is the truncated body of something...
 	Reason     string // only used in repo activity
 }
 
 func (s StatusItem) Preview() string {
-	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", "")
+	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", " ")
 }
 
 func getNotifications(client *http.Client) ([]Notification, error) {
@@ -326,6 +326,7 @@ func statusRun(opts *StatusOptions) error {
 		}
 
 		if actual, err := actualMention(client, n); actual != "" && err == nil {
+			// I'm so sorry
 			split := strings.Split(n.Subject.URL, "/")
 			mentions = append(mentions, StatusItem{
 				Repository: n.Repository.FullName,
@@ -465,12 +466,8 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
 
 	// TODO
-	// - evaluate formatting/lipgloss use
-	// - go/no-go on greeting
 	// - goroutines for each network call + subsequent processing
 	// - ensure caching appropriately
-	// - do a version of this where lipgloss is only used for horizontal alignment
-	// - do a version without lipgloss
 
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
 	raTP := utils.NewTablePrinter(&opts.IO)
