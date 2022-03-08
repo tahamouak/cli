@@ -162,7 +162,7 @@ func getEvents(client *http.Client) ([]Event, error) {
 	pages := 3
 	for page := 1; page <= pages; page++ {
 		query.Add("page", fmt.Sprintf("%d", page))
-		p := fmt.Sprintf("users/%s/events?%s", currentUsername, query.Encode())
+		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
 		// TODO handle fewer pages (ie page up not down)
 		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
 		if err != nil {
