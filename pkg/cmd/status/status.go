@@ -54,6 +54,7 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 	// TODO ability to run for an org
 	// TODO ability to exclude repositories
 	// TODO? ability to filter to single repository
+	// TODO break out sections into individual subcommands (but prob save for future PR)
 
 	return cmd
 }
@@ -73,7 +74,7 @@ type Notification struct {
 
 type StatusItem struct {
 	Repository string // owner/repo
-	Identifier string // eg cli/cli#1234
+	Identifier string // eg cli/cli#1234 or just 1234
 	preview    string // eg This is the truncated body of something...
 	Reason     string // only used in repo activity
 }
@@ -304,11 +305,45 @@ func (rs Results) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 
+type StatusGetter struct {
+	Client         *http.Client
+	Org            string
+	AssignedPRs    []StatusItem
+	AssignedIssues []StatusItem
+	Mentions       []StatusItem
+	ReviewRequests []StatusItem
+	RepoActivity   []StatusItem
+}
+
+// These are split up by endpoint since it is along that boundary we parallelize
+// work
+
+// Populate .Mentions
+func (s *StatusGetter) LoadNotifications() error {
+	// TODO
+	return nil
+}
+
+// Populate .AssignedPRs, .AssignedIssues, .ReviewRequests
+func (s *StatusGetter) LoadSearchResults() error {
+	// TODO
+	return nil
+}
+
+// Populate .RepoActivity
+func (s *StatusGetter) LoadEvents() error {
+	// TODO
+	return nil
+}
+
 func statusRun(opts *StatusOptions) error {
 	client, err := opts.HttpClient()
 	if err != nil {
 		return fmt.Errorf("could not create client: %w", err)
 	}
+
+	// TODO filter by org
+
 	ns, err := getNotifications(client)
 	if err != nil {
 		return err
