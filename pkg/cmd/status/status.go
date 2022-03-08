@@ -68,8 +68,12 @@ type Notification struct {
 type StatusItem struct {
 	Repository string // owner/repo
 	Identifier string // eg cli/cli#1234
-	Preview    string // eg This is the truncated body of a comment...
+	preview    string // eg This is the truncated body of a comment...
 	Reason     string // only used in repo activity
+}
+
+func (s StatusItem) Preview() string {
+	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", "")
 }
 
 func getNotifications(client *http.Client) ([]Notification, error) {
@@ -99,20 +103,26 @@ func getNotifications(client *http.Client) ([]Notification, error) {
 	return ret, nil
 }
 
-func actualMention(client *http.Client, n Notification) (bool, error) {
+func actualMention(client *http.Client, n Notification) (string, error) {
 	c := api.NewClientFromHTTP(client)
 	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	resp := struct {
 		Body string
 	}{}
 	if err := c.REST(ghinstance.Default(), "GET", n.Subject.LatestCommentURL, nil, &resp); err != nil {
-		return false, err
+		return "", err
 	}
 
-	return strings.Contains(resp.Body, "@"+currentUsername), nil
+	var ret string
+
+	if strings.Contains(resp.Body, "@"+currentUsername) {
+		ret = resp.Body
+	}
+
+	return ret, nil
 }
 
 type IssueOrPR struct {
@@ -290,14 +300,14 @@ func (rs Results) Swap(i, j int) {
 
 func statusRun(opts *StatusOptions) error {
 	// INITIAL SECTIONS:
-	// review requests
-	// mentions
 	// assigned issues
 	// assigned PRs
+	// review requests
+	// mentions
 	// repo activity
-	// new issue
-	// new pr
-	// comment
+	// 	new issue
+	// 	new pr
+	// 	comment
 
 	client, err := opts.HttpClient()
 	if err != nil {
@@ -315,13 +325,15 @@ func statusRun(opts *StatusOptions) error {
 			continue
 		}
 
-		// TODO error handling
-		if actual, err := actualMention(client, n); actual && err != nil {
+		if actual, err := actualMention(client, n); actual != "" && err == nil {
+			split := strings.Split(n.Subject.URL, "/")
 			mentions = append(mentions, StatusItem{
 				Repository: n.Repository.FullName,
-				Identifier: "TODO",
-				Preview:    "TODO",
+				Identifier: split[len(split)-1],
+				preview:    actual,
 			})
+		} else if err != nil {
+			return fmt.Errorf("could not fetch comment: %w", err)
 		}
 	}
 
@@ -341,7 +353,7 @@ func statusRun(opts *StatusOptions) error {
 			repoActivity = append(repoActivity, StatusItem{
 				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
 				Repository: e.Repo.Name,
-				Preview:    e.Payload.Issue.Title,
+				preview:    e.Payload.Issue.Title,
 				Reason:     "new issue",
 			})
 		case "PullRequestEvent":
@@ -351,12 +363,10 @@ func statusRun(opts *StatusOptions) error {
 			repoActivity = append(repoActivity, StatusItem{
 				Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
 				Repository: e.Repo.Name,
-				Preview:    e.Payload.PullRequest.Title,
+				preview:    e.Payload.PullRequest.Title,
 				Reason:     "new PR",
 			})
 		case "IssueCommentEvent":
-			body := strings.ReplaceAll(e.Payload.Comment.Body, "\r", "")
-			body = strings.ReplaceAll(body, "\n", " ")
 			reason := "issue comment"
 			// I'm so sorry
 			if strings.Contains(e.Payload.Comment.HTMLURL, `/pull/`) {
@@ -365,7 +375,7 @@ func statusRun(opts *StatusOptions) error {
 			repoActivity = append(repoActivity, StatusItem{
 				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
 				Repository: e.Repo.Name,
-				Preview:    body,
+				preview:    e.Payload.Comment.Body,
 				Reason:     reason,
 			})
 		}
@@ -437,7 +447,7 @@ func statusRun(opts *StatusOptions) error {
 			mTP.AddField(
 				fmt.Sprintf("%s#%s", m.Repository, m.Identifier),
 				nil, idStyle)
-			mTP.AddField(m.Preview, nil, nil)
+			mTP.AddField(m.Preview(), nil, nil)
 			mTP.EndRow()
 		}
 	} else {
@@ -472,7 +482,7 @@ func statusRun(opts *StatusOptions) error {
 		raTP.AddField(ra.Repository, nil, nil)
 		raTP.AddField(ra.Reason, nil, nil)
 		raTP.AddField(ra.Identifier, nil, idStyle)
-		raTP.AddField(ra.Preview, nil, nil)
+		raTP.AddField(ra.Preview(), nil, nil)
 		raTP.EndRow()
 	}
 
