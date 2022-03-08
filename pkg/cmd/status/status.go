@@ -368,16 +368,11 @@ func statusRun(opts *StatusOptions) error {
 				Reason:     "new PR",
 			})
 		case "IssueCommentEvent":
-			reason := "issue comment"
-			// I'm so sorry
-			if strings.Contains(e.Payload.Comment.HTMLURL, `/pull/`) {
-				reason = "PR comment"
-			}
 			repoActivity = append(repoActivity, StatusItem{
 				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
 				Repository: e.Repo.Name,
 				preview:    e.Payload.Comment.Body,
-				Reason:     reason,
+				Reason:     "comment on " + e.Payload.Issue.Title,
 			})
 		}
 	}
@@ -476,9 +471,8 @@ func statusRun(opts *StatusOptions) error {
 		if i >= 10 {
 			break
 		}
-		raTP.AddField(ra.Repository, nil, nil)
+		raTP.AddField(ra.Repository+"#"+ra.Identifier, nil, idStyle)
 		raTP.AddField(ra.Reason, nil, nil)
-		raTP.AddField(ra.Identifier, nil, idStyle)
 		raTP.AddField(ra.Preview(), nil, nil)
 		raTP.EndRow()
 	}
