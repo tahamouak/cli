@@ -36,10 +36,33 @@ var RepositoryFields = []string{
 	"watchersCount",
 }
 
+var IssueFields = []string{
+	"assignee",
+	"authorAssociation",
+	"body",
+	"closedAt",
+	"comments",
+	"createdAt",
+	"id",
+	"labels",
+	"isLocked",
+	"number",
+	"pullRequestLinks",
+	"state",
+	"title",
+	"updatedAt",
+}
+
 type RepositoriesResult struct {
 	IncompleteResults bool         `json:"incomplete_results"`
 	Items             []Repository `json:"items"`
 	Total             int          `json:"total_count"`
+}
+
+type IssuesResult struct {
+	IncompleteResults bool    `json:"incomplete_results"`
+	Items             []Issue `json:"items"`
+	Total             int     `json:"total_count"`
 }
 
 type Repository struct {
@@ -88,6 +111,41 @@ type User struct {
 	Type       string `json:"type"`
 }
 
+type Issue struct {
+	Assignee          User             `json:"assignee"`
+	AuthorAssociation string           `json:"author_association"`
+	Body              string           `json:"body"`
+	ClosedAt          time.Time        `json:"closed_at"`
+	Comments          int              `json:"comments"`
+	CreatedAt         time.Time        `json:"created_at"`
+	HTMLURL           string           `json:"html_url"`
+	ID                int64            `json:"id"`
+	Labels            []Label          `json:"labels"`
+	IsLocked          bool             `json:"locked"`
+	Number            int              `json:"number"`
+	PullRequestLinks  PullRequestLinks `json:"pull_request"`
+	RepositoryURL     string           `json:"repository_url"`
+	State             string           `json:"state"`
+	Title             string           `json:"title"`
+	URL               string           `json:"url"`
+	UpdatedAt         time.Time        `json:"updated_at"`
+	User              User             `json:"user"`
+}
+
+type PullRequestLinks struct {
+	DiffURL  string `json:"diff_url"`
+	HTMLURL  string `json:"html_url"`
+	PatchURL string `json:"patch_url"`
+	URL      string `json:"url"`
+}
+
+type Label struct {
+	Color string `json:"color"`
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	URL   string `json:"url"`
+}
+
 func (repo Repository) ExportData(fields []string) map[string]interface{} {
 	v := reflect.ValueOf(repo)
 	data := map[string]interface{}{}
@@ -104,6 +162,53 @@ func (repo Repository) ExportData(fields []string) map[string]interface{} {
 				"id":    repo.Owner.ID,
 				"login": repo.Owner.Login,
 				"type":  repo.Owner.Type,
+			}
+		default:
+			sf := fieldByName(v, f)
+			data[f] = sf.Interface()
+		}
+	}
+	return data
+}
+
+func (issue Issue) IsPullRequest() bool {
+	return issue.PullRequestLinks.URL != ""
+}
+
+func (issue Issue) ExportData(fields []string) map[string]interface{} {
+	v := reflect.ValueOf(issue)
+	data := map[string]interface{}{}
+	for _, f := range fields {
+		switch f {
+		case "assignee":
+			data[f] = map[string]interface{}{
+				"id":    issue.Assignee.ID,
+				"login": issue.Assignee.Login,
+				"type":  issue.Assignee.Type,
+			}
+		case "Labels":
+			labels := make([]interface{}, 0, len(issue.Labels))
+			for _, label := range issue.Labels {
+				labels = append(labels, map[string]interface{}{
+					"color": label.Color,
+					"id":    label.ID,
+					"name":  label.Name,
+					"url":   label.URL,
+				})
+			}
+			data[f] = labels
+		case "PullRequestLinks":
+			data[f] = map[string]interface{}{
+				"diffUrl":  issue.PullRequestLinks.DiffURL,
+				"htmlUrl":  issue.PullRequestLinks.HTMLURL,
+				"patchUrl": issue.PullRequestLinks.PatchURL,
+				"url":      issue.PullRequestLinks.URL,
+			}
+		case "User":
+			data[f] = map[string]interface{}{
+				"id":    issue.User.ID,
+				"login": issue.User.Login,
+				"type":  issue.User.Type,
 			}
 		default:
 			sf := fieldByName(v, f)
