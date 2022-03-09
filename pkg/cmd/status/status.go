@@ -83,33 +83,6 @@ func (s StatusItem) Preview() string {
 	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", " ")
 }
 
-func getNotifications(client *http.Client) ([]Notification, error) {
-	apiClient := api.NewClientFromHTTP(client)
-	query := url.Values{}
-	query.Add("per_page", "100")
-
-	// TODO put Now in opts
-	day, _ := time.ParseDuration("24h")
-	query.Add("since", time.Now().Add(-day).Format(time.RFC3339))
-
-	// TODO might want to get multiple pages since I'm sorting the results into buckets
-	var ret []Notification
-	var resp []Notification
-	pages := 2
-	for page := 1; page <= pages; page++ {
-		query.Add("page", fmt.Sprintf("%d", page))
-		p := fmt.Sprintf("notifications?%s", query.Encode())
-		// behavior when only one page?
-		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
-		if err != nil {
-			return nil, fmt.Errorf("could not get notifications: %w", err)
-		}
-		ret = append(ret, resp...)
-	}
-
-	return ret, nil
-}
-
 func actualMention(client *http.Client, n Notification) (string, error) {
 	c := api.NewClientFromHTTP(client)
 	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
@@ -315,12 +288,63 @@ type StatusGetter struct {
 	RepoActivity   []StatusItem
 }
 
+func NewStatusGetter(client *http.Client, org string) *StatusGetter {
+	return &StatusGetter{
+		Client: client,
+		Org:    org,
+	}
+}
+
 // These are split up by endpoint since it is along that boundary we parallelize
 // work
 
 // Populate .Mentions
 func (s *StatusGetter) LoadNotifications() error {
-	// TODO
+	apiClient := api.NewClientFromHTTP(s.Client)
+	query := url.Values{}
+	query.Add("per_page", "100")
+	query.Add("participating", "true")
+	query.Add("all", "true")
+
+	// TODO put Now in opts
+	//day, _ := time.ParseDuration("24h")
+	//query.Add("since", time.Now().Add(-day).Format(time.RFC3339))
+
+	// TODO might want to get multiple pages since I'm sorting the results into buckets
+	var ns []Notification
+	var resp []Notification
+	pages := 3
+	for page := 1; page <= pages; page++ {
+		query.Add("page", fmt.Sprintf("%d", page))
+		p := fmt.Sprintf("notifications?%s", query.Encode())
+		// behavior when only one page?
+		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		if err != nil {
+			return fmt.Errorf("could not get notifications: %w", err)
+		}
+		ns = append(ns, resp...)
+	}
+
+	s.Mentions = []StatusItem{}
+
+	for _, n := range ns {
+		if n.Reason != "mention" {
+			continue
+		}
+
+		if actual, err := actualMention(s.Client, n); actual != "" && err == nil {
+			// I'm so sorry
+			split := strings.Split(n.Subject.URL, "/")
+			s.Mentions = append(s.Mentions, StatusItem{
+				Repository: n.Repository.FullName,
+				Identifier: split[len(split)-1],
+				preview:    actual,
+			})
+		} else if err != nil {
+			return fmt.Errorf("could not fetch comment: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -342,32 +366,15 @@ func statusRun(opts *StatusOptions) error {
 		return fmt.Errorf("could not create client: %w", err)
 	}
 
+	sg := NewStatusGetter(client, opts.Org)
+
 	// TODO filter by org
 
-	ns, err := getNotifications(client)
+	err = sg.LoadNotifications()
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get notifications: %w", err)
 	}
-
-	mentions := []StatusItem{}
-
-	for _, n := range ns {
-		if n.Reason != "mention" {
-			continue
-		}
-
-		if actual, err := actualMention(client, n); actual != "" && err == nil {
-			// I'm so sorry
-			split := strings.Split(n.Subject.URL, "/")
-			mentions = append(mentions, StatusItem{
-				Repository: n.Repository.FullName,
-				Identifier: split[len(split)-1],
-				preview:    actual,
-			})
-		} else if err != nil {
-			return fmt.Errorf("could not fetch comment: %w", err)
-		}
-	}
+	mentions := sg.Mentions
 
 	es, err := getEvents(client)
 	if err != nil {
