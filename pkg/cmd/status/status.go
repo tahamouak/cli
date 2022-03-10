@@ -137,106 +137,6 @@ type SearchResult struct {
 	}
 }
 
-type SearchResults struct {
-	AssignedPRs    []SearchResult
-	AssignedIssues []SearchResult
-	ReviewRequests []SearchResult
-}
-
-func doSearch(client *http.Client) (*SearchResults, error) {
-	q := `
-	query AssignedSearch {
-	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open") {
-		  edges {
-		  node {
-			...on Issue {
-			  __typename
-			  updatedAt
-			  title
-			  number
-			  repository {
-				nameWithOwner
-			  }
-			}
-			...on PullRequest {
-			  updatedAt
-			  __typename
-			  title
-			  number
-			  repository {
-				nameWithOwner
-			  }
-			}
-		  }
-		}
-	  }
-	  reviewRequested: search(first: 25, type: ISSUE, query:"state:open review-requested:@me") {
-		  edges {
-			  node {
-				...on PullRequest {
-				  updatedAt
-				  __typename
-				  title
-				  number
-				  repository {
-					nameWithOwner
-				  }
-				}
-			  }
-		  }
-	  }
-	}`
-	apiClient := api.NewClientFromHTTP(client)
-
-	var resp struct {
-		Assignments struct {
-			Edges []struct {
-				Node SearchResult
-			}
-		}
-		ReviewRequested struct {
-			Edges []struct {
-				Node SearchResult
-			}
-		}
-	}
-	err := apiClient.GraphQL(ghinstance.Default(), q, nil, &resp)
-	if err != nil {
-		return nil, fmt.Errorf("could not search for assignments: %w", err)
-	}
-
-	prs := []SearchResult{}
-	issues := []SearchResult{}
-	reviewRequested := []SearchResult{}
-
-	for _, e := range resp.Assignments.Edges {
-		if e.Node.Type == "Issue" {
-			issues = append(issues, e.Node)
-		} else if e.Node.Type == "PullRequest" {
-			prs = append(prs, e.Node)
-		} else {
-			panic("you shouldn't be here")
-		}
-	}
-
-	for _, e := range resp.ReviewRequested.Edges {
-		reviewRequested = append(reviewRequested, e.Node)
-	}
-
-	sort.Sort(Results(issues))
-	sort.Sort(Results(prs))
-	sort.Sort(Results(reviewRequested))
-
-	// TODO convert to Status Items
-
-	return &SearchResults{
-		AssignedIssues: issues,
-		AssignedPRs:    prs,
-		ReviewRequests: reviewRequested,
-	}, nil
-
-}
-
 type Results []SearchResult
 
 func (rs Results) Len() int {
@@ -323,7 +223,117 @@ func (s *StatusGetter) LoadNotifications() error {
 
 // Populate .AssignedPRs, .AssignedIssues, .ReviewRequests
 func (s *StatusGetter) LoadSearchResults() error {
-	// TODO
+	q := `
+	query AssignedSearch {
+	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open") {
+		  edges {
+		  node {
+			...on Issue {
+			  __typename
+			  updatedAt
+			  title
+			  number
+			  repository {
+				nameWithOwner
+			  }
+			}
+			...on PullRequest {
+			  updatedAt
+			  __typename
+			  title
+			  number
+			  repository {
+				nameWithOwner
+			  }
+			}
+		  }
+		}
+	  }
+	  reviewRequested: search(first: 25, type: ISSUE, query:"state:open review-requested:@me") {
+		  edges {
+			  node {
+				...on PullRequest {
+				  updatedAt
+				  __typename
+				  title
+				  number
+				  repository {
+					nameWithOwner
+				  }
+				}
+			  }
+		  }
+	  }
+	}`
+	apiClient := api.NewClientFromHTTP(s.Client)
+
+	var resp struct {
+		Assignments struct {
+			Edges []struct {
+				Node SearchResult
+			}
+		}
+		ReviewRequested struct {
+			Edges []struct {
+				Node SearchResult
+			}
+		}
+	}
+	err := apiClient.GraphQL(ghinstance.Default(), q, nil, &resp)
+	if err != nil {
+		return fmt.Errorf("could not search for assignments: %w", err)
+	}
+
+	prs := []SearchResult{}
+	issues := []SearchResult{}
+	reviewRequested := []SearchResult{}
+
+	for _, e := range resp.Assignments.Edges {
+		if e.Node.Type == "Issue" {
+			issues = append(issues, e.Node)
+		} else if e.Node.Type == "PullRequest" {
+			prs = append(prs, e.Node)
+		} else {
+			panic("you shouldn't be here")
+		}
+	}
+
+	for _, e := range resp.ReviewRequested.Edges {
+		reviewRequested = append(reviewRequested, e.Node)
+	}
+
+	sort.Sort(Results(issues))
+	sort.Sort(Results(prs))
+	sort.Sort(Results(reviewRequested))
+
+	s.AssignedIssues = []StatusItem{}
+	s.AssignedPRs = []StatusItem{}
+	s.ReviewRequests = []StatusItem{}
+
+	for _, i := range issues {
+		s.AssignedIssues = append(s.AssignedIssues, StatusItem{
+			Repository: i.Repository.NameWithOwner,
+			Identifier: fmt.Sprintf("%s#%d", i.Repository.NameWithOwner, i.Number),
+			preview:    i.Title,
+		})
+	}
+
+	for _, pr := range prs {
+		s.AssignedPRs = append(s.AssignedPRs, StatusItem{
+			Repository: pr.Repository.NameWithOwner,
+			Identifier: fmt.Sprintf("%s#%d", pr.Repository.NameWithOwner, pr.Number),
+			preview:    pr.Title,
+		})
+	}
+
+	for _, r := range reviewRequested {
+		s.ReviewRequests = append(s.ReviewRequests, StatusItem{
+			Repository: r.Repository.NameWithOwner,
+			Identifier: fmt.Sprintf("%s#%d", r.Repository.NameWithOwner, r.Number),
+			preview:    r.Title,
+		})
+	}
+
 	return nil
 }
 
@@ -411,9 +421,9 @@ func statusRun(opts *StatusOptions) error {
 		return fmt.Errorf("could not load events: %w", err)
 	}
 
-	results, err := doSearch(client)
+	err = sg.LoadSearchResults()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to search: %w", err)
 	}
 
 	cs := opts.IO.ColorScheme()
@@ -427,9 +437,7 @@ func statusRun(opts *StatusOptions) error {
 	rightHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
-	// TODO rename to renderSection; take a list of status items
-	// TODO use this for mentions once above is done
-	renderSearchResults := func(header string, results []SearchResult) string {
+	renderSection := func(header string, items []StatusItem) string {
 		tableOut := &bytes.Buffer{}
 		fmt.Fprintln(tableOut, headerStyle(header))
 		tp := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
@@ -437,18 +445,16 @@ func statusRun(opts *StatusOptions) error {
 			MaxWidth: halfWidth,
 			Out:      tableOut,
 		})
-		if len(results) == 0 {
+		if len(items) == 0 {
 			tp.AddField("Nothing here ^_^", nil, nil)
 			tp.EndRow()
 		} else {
-			for i, r := range results {
+			for i, si := range items {
 				if i == maxLen {
 					break
 				}
-				tp.AddField(
-					fmt.Sprintf("%s#%d", r.Repository.NameWithOwner, r.Number),
-					nil, idStyle)
-				tp.AddField(r.Title, nil, nil)
+				tp.AddField(si.Identifier, nil, idStyle)
+				tp.AddField(si.Preview(), nil, nil)
 				tp.EndRow()
 			}
 		}
@@ -458,9 +464,12 @@ func statusRun(opts *StatusOptions) error {
 		return tableOut.String()
 	}
 
-	prSection := renderSearchResults("Assigned PRs", results.AssignedPRs)
-	issuesSection := renderSearchResults("Assigned Issues", results.AssignedIssues)
-	reviewSection := renderSearchResults("Review Requests", results.ReviewRequests)
+	// TODO rename to renderSection; take a list of status items
+	// TODO use this for mentions once above is done
+
+	prSection := renderSection("Assigned PRs", sg.AssignedPRs)
+	issuesSection := renderSection("Assigned Issues", sg.AssignedIssues)
+	reviewSection := renderSection("Review Requests", sg.ReviewRequests)
 
 	mOut := &bytes.Buffer{}
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
