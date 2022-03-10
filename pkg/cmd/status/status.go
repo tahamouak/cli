@@ -393,7 +393,7 @@ func (s *StatusGetter) LoadEvents() error {
 
 	var events []Event
 	var resp []Event
-	pages := 3
+	pages := 2
 	for page := 1; page <= pages; page++ {
 		query.Add("page", fmt.Sprintf("%d", page))
 		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
@@ -409,6 +409,9 @@ func (s *StatusGetter) LoadEvents() error {
 
 	for _, e := range events {
 		if s.Org != "" && e.Org.Login != s.Org {
+			continue
+		}
+		if s.ShouldExclude(e.Repo.Name) {
 			continue
 		}
 		si := StatusItem{}
