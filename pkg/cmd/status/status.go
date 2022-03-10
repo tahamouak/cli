@@ -179,6 +179,10 @@ func NewStatusGetter(client *http.Client, org, exclude string) *StatusGetter {
 	}
 }
 
+func (s *StatusGetter) ShouldExclude(repo string) bool {
+	return strings.Contains(s.Exclude, repo)
+}
+
 // These are split up by endpoint since it is along that boundary we parallelize
 // work
 
@@ -217,6 +221,10 @@ func (s *StatusGetter) LoadNotifications() error {
 		}
 
 		if s.Org != "" && n.Repository.Owner.Login != s.Org {
+			continue
+		}
+
+		if s.ShouldExclude(n.Repository.FullName) {
 			continue
 		}
 
