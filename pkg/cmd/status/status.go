@@ -248,7 +248,7 @@ func (s *StatusGetter) LoadNotifications() error {
 func (s *StatusGetter) LoadSearchResults() error {
 	q := `
 	query AssignedSearch {
-	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open%s") {
+	  assignments: search(first: 25, type: ISSUE, query:"%s") {
 		  edges {
 		  node {
 			...on Issue {
@@ -272,7 +272,7 @@ func (s *StatusGetter) LoadSearchResults() error {
 		  }
 		}
 	  }
-	  reviewRequested: search(first: 25, type: ISSUE, query:"state:open review-requested:@me") {
+	  reviewRequested: search(first: 25, type: ISSUE, query:"%s") {
 		  edges {
 			  node {
 				...on PullRequest {
@@ -289,11 +289,23 @@ func (s *StatusGetter) LoadSearchResults() error {
 	  }
 	}`
 
+	assignmentsQ := `assignee:@me state:open%s%s`
+	requestedQ := `state:open review-requested:@me%s%s`
+
 	orgFilter := ""
 	if s.Org != "" {
 		orgFilter = " org:" + s.Org
 	}
-	q = fmt.Sprintf(q, orgFilter)
+	excludeFilter := ""
+	if s.Exclude != "" {
+		for _, repo := range strings.Split(s.Exclude, ",") {
+			excludeFilter += " -repo:" + repo
+		}
+	}
+	assignmentsQ = fmt.Sprintf(assignmentsQ, orgFilter, excludeFilter)
+	requestedQ = fmt.Sprintf(requestedQ, orgFilter, excludeFilter)
+
+	q = fmt.Sprintf(q, assignmentsQ, requestedQ)
 
 	apiClient := api.NewClientFromHTTP(s.Client)
 
