@@ -127,33 +127,6 @@ type Event struct {
 	}
 }
 
-func getEvents(client *http.Client) ([]Event, error) {
-	apiClient := api.NewClientFromHTTP(client)
-	query := url.Values{}
-	query.Add("per_page", "100")
-
-	currentUsername, err := api.CurrentLoginName(apiClient, ghinstance.Default())
-	if err != nil {
-		return nil, err
-	}
-
-	var ret []Event
-	var resp []Event
-	pages := 3
-	for page := 1; page <= pages; page++ {
-		query.Add("page", fmt.Sprintf("%d", page))
-		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
-		// TODO handle fewer pages (ie page up not down)
-		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
-		if err != nil {
-			return nil, fmt.Errorf("could not get events: %w", err)
-		}
-		ret = append(ret, resp...)
-	}
-
-	return ret, nil
-}
-
 type SearchResult struct {
 	Type       string `json:"__typename"`
 	UpdatedAt  time.Time
@@ -306,11 +279,11 @@ func (s *StatusGetter) LoadNotifications() error {
 	query.Add("participating", "true")
 	query.Add("all", "true")
 
-	// TODO put Now in opts
-	//day, _ := time.ParseDuration("24h")
-	//query.Add("since", time.Now().Add(-day).Format(time.RFC3339))
-
-	// TODO might want to get multiple pages since I'm sorting the results into buckets
+	// this sucks, having to fetch so much :/ but it was the only way in my
+	// testing to really get enough mentions. I would love to be able to just
+	// filter for mentions but it does not seem like the notifications API can
+	// do that. I'd switch to the GraphQL version, but to my knowledge that does
+	// not work with PATs right now.
 	var ns []Notification
 	var resp []Notification
 	pages := 3
@@ -356,7 +329,64 @@ func (s *StatusGetter) LoadSearchResults() error {
 
 // Populate .RepoActivity
 func (s *StatusGetter) LoadEvents() error {
-	// TODO
+	apiClient := api.NewClientFromHTTP(s.Client)
+	query := url.Values{}
+	query.Add("per_page", "100")
+
+	// TODO caching
+	currentUsername, err := api.CurrentLoginName(apiClient, ghinstance.Default())
+	if err != nil {
+		return err
+	}
+
+	var events []Event
+	var resp []Event
+	pages := 3
+	for page := 1; page <= pages; page++ {
+		query.Add("page", fmt.Sprintf("%d", page))
+		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
+		// TODO handle fewer pages (ie page up not down)
+		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		if err != nil {
+			return fmt.Errorf("could not get events: %w", err)
+		}
+		events = append(events, resp...)
+	}
+
+	s.RepoActivity = []StatusItem{}
+
+	for _, e := range events {
+		switch e.Type {
+		case "IssuesEvent":
+			if e.Payload.Action != "opened" {
+				continue
+			}
+			s.RepoActivity = append(s.RepoActivity, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+				Repository: e.Repo.Name,
+				preview:    e.Payload.Issue.Title,
+				Reason:     "new issue",
+			})
+		case "PullRequestEvent":
+			if e.Payload.Action != "opened" {
+				continue
+			}
+			s.RepoActivity = append(s.RepoActivity, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
+				Repository: e.Repo.Name,
+				preview:    e.Payload.PullRequest.Title,
+				Reason:     "new PR",
+			})
+		case "IssueCommentEvent":
+			s.RepoActivity = append(s.RepoActivity, StatusItem{
+				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
+				Repository: e.Repo.Name,
+				preview:    e.Payload.Comment.Body,
+				Reason:     "comment on " + e.Payload.Issue.Title,
+			})
+		}
+	}
+
 	return nil
 }
 
@@ -372,47 +402,13 @@ func statusRun(opts *StatusOptions) error {
 
 	err = sg.LoadNotifications()
 	if err != nil {
-		return fmt.Errorf("could not get notifications: %w", err)
+		return fmt.Errorf("could not load notifications: %w", err)
 	}
 	mentions := sg.Mentions
 
-	es, err := getEvents(client)
+	err = sg.LoadEvents()
 	if err != nil {
-		return err
-	}
-
-	repoActivity := []StatusItem{}
-
-	for _, e := range es {
-		switch e.Type {
-		case "IssuesEvent":
-			if e.Payload.Action != "opened" {
-				continue
-			}
-			repoActivity = append(repoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.Issue.Title,
-				Reason:     "new issue",
-			})
-		case "PullRequestEvent":
-			if e.Payload.Action != "opened" {
-				continue
-			}
-			repoActivity = append(repoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.PullRequest.Title,
-				Reason:     "new PR",
-			})
-		case "IssueCommentEvent":
-			repoActivity = append(repoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.Comment.Body,
-				Reason:     "comment on " + e.Payload.Issue.Title,
-			})
-		}
+		return fmt.Errorf("could not load events: %w", err)
 	}
 
 	results, err := doSearch(client)
@@ -506,7 +502,7 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(mOut, headerStyle("Mentions"))
 	raTP := utils.NewTablePrinter(opts.IO)
 
-	for i, ra := range repoActivity {
+	for i, ra := range sg.RepoActivity {
 		if i >= 10 {
 			break
 		}
