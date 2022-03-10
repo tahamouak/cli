@@ -428,16 +428,15 @@ func statusRun(opts *StatusOptions) error {
 
 	cs := opts.IO.ColorScheme()
 	out := opts.IO.Out
-
 	halfWidth := (opts.IO.TerminalWidth() / 2) - 2
+	maxLen := 5
 
 	idStyle := cs.Cyan
 	headerStyle := cs.Bold
 	leftHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0).BorderRight(true).BorderStyle(lipgloss.NormalBorder())
 	rightHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
-	maxLen := 5
 
-	section := func(header string, items []StatusItem) string {
+	section := func(header string, items []StatusItem) (string, error) {
 		tableOut := &bytes.Buffer{}
 		fmt.Fprintln(tableOut, headerStyle(header))
 		tp := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
@@ -459,18 +458,37 @@ func statusRun(opts *StatusOptions) error {
 			}
 		}
 
-		tp.Render()
+		err := tp.Render()
+		if err != nil {
+			return "", err
+		}
 
-		return tableOut.String()
+		return tableOut.String(), nil
 	}
 
-	mentionsP := rightHalfStyle.Render(section("Mentions", mentions))
-	reviewRequestsP := leftHalfStyle.Render(section("Review Requests", sg.ReviewRequests))
-	assignedPRsP := rightHalfStyle.Render(section("Assigned PRs", sg.AssignedPRs))
-	assignedIssuesP := leftHalfStyle.Render(section("Assigned Issues", sg.AssignedIssues))
+	mSection, err := section("Mentions", mentions)
+	if err != nil {
+		return fmt.Errorf("failed to render 'Mentions': %w", err)
+	}
+	mSection = rightHalfStyle.Render(mSection)
 
-	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
-	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
+	rrSection, err := section("Review Requests", sg.ReviewRequests)
+	if err != nil {
+		return fmt.Errorf("failed to render 'Review Requests': %w", err)
+	}
+	rrSection = leftHalfStyle.Render(rrSection)
+
+	prSection, err := section("Assigned PRs", sg.AssignedPRs)
+	if err != nil {
+		return fmt.Errorf("failed to render 'Assigned PRs': %w", err)
+	}
+	prSection = rightHalfStyle.Render(prSection)
+
+	issueSection, err := section("Assigned Issues", sg.AssignedIssues)
+	if err != nil {
+		return fmt.Errorf("failed to render 'Assigned Issues': %w", err)
+	}
+	issueSection = leftHalfStyle.Render(issueSection)
 
 	// TODO
 	// - goroutines for each network call + subsequent processing
@@ -488,9 +506,13 @@ func statusRun(opts *StatusOptions) error {
 		raTP.EndRow()
 	}
 
+	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, issueSection, prSection))
+	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, rrSection, mSection))
 	fmt.Fprintln(out, headerStyle("Repository Activity"))
 
-	raTP.Render()
+	if err = raTP.Render(); err != nil {
+		return fmt.Errorf("failed to render 'Repository Activity': %w", err)
+	}
 
 	return nil
 }
