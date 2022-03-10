@@ -232,7 +232,7 @@ func (s *StatusGetter) LoadNotifications() error {
 func (s *StatusGetter) LoadSearchResults() error {
 	q := `
 	query AssignedSearch {
-	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open") {
+	  assignments: search(first: 25, type: ISSUE, query:"assignee:@me state:open%s") {
 		  edges {
 		  node {
 			...on Issue {
@@ -272,6 +272,13 @@ func (s *StatusGetter) LoadSearchResults() error {
 		  }
 	  }
 	}`
+
+	orgFilter := ""
+	if s.Org != "" {
+		orgFilter = " org:" + s.Org
+	}
+	q = fmt.Sprintf(q, orgFilter)
+
 	apiClient := api.NewClientFromHTTP(s.Client)
 
 	var resp struct {
