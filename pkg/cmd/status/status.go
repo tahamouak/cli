@@ -114,7 +114,10 @@ type IssueOrPR struct {
 }
 
 type Event struct {
-	Type      string
+	Type string
+	Org  struct {
+		Login string
+	}
 	CreatedAt time.Time `json:"created_at"`
 	Repo      struct {
 		Name string // owner/repo
@@ -380,6 +383,9 @@ func (s *StatusGetter) LoadEvents() error {
 	s.RepoActivity = []StatusItem{}
 
 	for _, e := range events {
+		if s.Org != "" && e.Org.Login != s.Org {
+			continue
+		}
 		switch e.Type {
 		case "IssuesEvent":
 			if e.Payload.Action != "opened" {
