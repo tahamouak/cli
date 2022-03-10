@@ -68,6 +68,9 @@ type Notification struct {
 		Type             string
 	}
 	Repository struct {
+		Owner struct {
+			Login string
+		}
 		FullName string `json:"full_name"`
 	}
 }
@@ -205,12 +208,16 @@ func (s *StatusGetter) LoadNotifications() error {
 			continue
 		}
 
+		if s.Org != "" && n.Repository.Owner.Login != s.Org {
+			continue
+		}
+
 		if actual, err := actualMention(s.Client, n); actual != "" && err == nil {
 			// I'm so sorry
 			split := strings.Split(n.Subject.URL, "/")
 			s.Mentions = append(s.Mentions, StatusItem{
 				Repository: n.Repository.FullName,
-				Identifier: split[len(split)-1],
+				Identifier: fmt.Sprintf("%s#%s", n.Repository.FullName, split[len(split)-1]),
 				preview:    actual,
 			})
 		} else if err != nil {
