@@ -437,7 +437,7 @@ func statusRun(opts *StatusOptions) error {
 	rightHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 	maxLen := 5
 
-	renderSection := func(header string, items []StatusItem) string {
+	section := func(header string, items []StatusItem) string {
 		tableOut := &bytes.Buffer{}
 		fmt.Fprintln(tableOut, headerStyle(header))
 		tp := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
@@ -464,42 +464,10 @@ func statusRun(opts *StatusOptions) error {
 		return tableOut.String()
 	}
 
-	// TODO rename to renderSection; take a list of status items
-	// TODO use this for mentions once above is done
-
-	prSection := renderSection("Assigned PRs", sg.AssignedPRs)
-	issuesSection := renderSection("Assigned Issues", sg.AssignedIssues)
-	reviewSection := renderSection("Review Requests", sg.ReviewRequests)
-
-	mOut := &bytes.Buffer{}
-	fmt.Fprintln(mOut, headerStyle("Mentions"))
-	mTP := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
-		IsTTY:    opts.IO.IsStdoutTTY(),
-		MaxWidth: halfWidth,
-		Out:      mOut,
-	})
-
-	if len(mentions) > 0 {
-		for i, m := range mentions {
-			if i == maxLen {
-				break
-			}
-			mTP.AddField(
-				fmt.Sprintf("%s#%s", m.Repository, m.Identifier),
-				nil, idStyle)
-			mTP.AddField(m.Preview(), nil, nil)
-			mTP.EndRow()
-		}
-	} else {
-		mTP.AddField("Nothing here ^_^", nil, nil)
-	}
-
-	mTP.Render()
-
-	mentionsP := rightHalfStyle.Render(mOut.String())
-	reviewRequestsP := leftHalfStyle.Render(reviewSection)
-	assignedPRsP := rightHalfStyle.Render(prSection)
-	assignedIssuesP := leftHalfStyle.Render(issuesSection)
+	mentionsP := rightHalfStyle.Render(section("Mentions", mentions))
+	reviewRequestsP := leftHalfStyle.Render(section("Review Requests", sg.ReviewRequests))
+	assignedPRsP := rightHalfStyle.Render(section("Assigned PRs", sg.AssignedPRs))
+	assignedIssuesP := leftHalfStyle.Render(section("Assigned Issues", sg.AssignedIssues))
 
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, assignedIssuesP, assignedPRsP))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, reviewRequestsP, mentionsP))
@@ -508,7 +476,6 @@ func statusRun(opts *StatusOptions) error {
 	// - goroutines for each network call + subsequent processing
 	// - ensure caching appropriately
 
-	fmt.Fprintln(mOut, headerStyle("Mentions"))
 	raTP := utils.NewTablePrinter(opts.IO)
 
 	for i, ra := range sg.RepoActivity {
