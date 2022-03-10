@@ -22,9 +22,10 @@ import (
 type StatusOptions struct {
 	BaseRepo        func() (ghrepo.Interface, error)
 	HttpClient      func() (*http.Client, error)
+	IO              *iostreams.IOStreams
 	HasRepoOverride bool
 	Org             string
-	IO              *iostreams.IOStreams
+	Exclude         string
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
@@ -36,6 +37,7 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 		Short: "Print information about relevant issues, pull requests, and notifications across repositories",
 		Long:  "TODO",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// TODO decide if I want to bother implementing this
 			// comically, I think this has use scoped to a single repository
 			// support `-R, --repo` override
 			opts.BaseRepo = f.BaseRepo
@@ -50,6 +52,7 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 	}
 
 	cmd.Flags().StringVarP(&opts.Org, "org", "o", "", "Report status within an organization")
+	cmd.Flags().StringVarP(&opts.Exclude, "exclude", "e", "", "Comma separated list of repos to exclude in owner/name format")
 
 	// TODO ability to run for an org
 	// TODO ability to exclude repositories
@@ -160,6 +163,7 @@ func (rs Results) Swap(i, j int) {
 type StatusGetter struct {
 	Client         *http.Client
 	Org            string
+	Exclude        string
 	AssignedPRs    []StatusItem
 	AssignedIssues []StatusItem
 	Mentions       []StatusItem
@@ -167,10 +171,11 @@ type StatusGetter struct {
 	RepoActivity   []StatusItem
 }
 
-func NewStatusGetter(client *http.Client, org string) *StatusGetter {
+func NewStatusGetter(client *http.Client, org, exclude string) *StatusGetter {
 	return &StatusGetter{
-		Client: client,
-		Org:    org,
+		Client:  client,
+		Org:     org,
+		Exclude: exclude,
 	}
 }
 
@@ -386,35 +391,33 @@ func (s *StatusGetter) LoadEvents() error {
 		if s.Org != "" && e.Org.Login != s.Org {
 			continue
 		}
+		si := StatusItem{}
+		var number int
 		switch e.Type {
 		case "IssuesEvent":
 			if e.Payload.Action != "opened" {
 				continue
 			}
-			s.RepoActivity = append(s.RepoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.Issue.Title,
-				Reason:     "new issue",
-			})
+			si.Reason = "new issue"
+			si.preview = e.Payload.Issue.Title
+			number = e.Payload.Issue.Number
 		case "PullRequestEvent":
 			if e.Payload.Action != "opened" {
 				continue
 			}
-			s.RepoActivity = append(s.RepoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.PullRequest.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.PullRequest.Title,
-				Reason:     "new PR",
-			})
+			si.Reason = "new PR"
+			si.preview = e.Payload.PullRequest.Title
+			number = e.Payload.PullRequest.Number
 		case "IssueCommentEvent":
-			s.RepoActivity = append(s.RepoActivity, StatusItem{
-				Identifier: fmt.Sprintf("%d", e.Payload.Issue.Number),
-				Repository: e.Repo.Name,
-				preview:    e.Payload.Comment.Body,
-				Reason:     "comment on " + e.Payload.Issue.Title,
-			})
+			si.Reason = "comment on " + e.Payload.Issue.Title
+			si.preview = e.Payload.Comment.Body
+			number = e.Payload.Issue.Number
+		default:
+			continue
 		}
+		si.Repository = e.Repo.Name
+		si.Identifier = fmt.Sprintf("%s#%d", e.Repo.Name, number)
+		s.RepoActivity = append(s.RepoActivity, si)
 	}
 
 	return nil
@@ -426,9 +429,7 @@ func statusRun(opts *StatusOptions) error {
 		return fmt.Errorf("could not create client: %w", err)
 	}
 
-	sg := NewStatusGetter(client, opts.Org)
-
-	// TODO filter by org
+	sg := NewStatusGetter(client, opts.Org, opts.Exclude)
 
 	err = sg.LoadNotifications()
 	if err != nil {
@@ -448,20 +449,19 @@ func statusRun(opts *StatusOptions) error {
 
 	cs := opts.IO.ColorScheme()
 	out := opts.IO.Out
-	halfWidth := (opts.IO.TerminalWidth() / 2) - 2
-	maxLen := 5
+	fullWidth := opts.IO.TerminalWidth()
+	halfWidth := (fullWidth / 2) - 2
 
 	idStyle := cs.Cyan
-	headerStyle := cs.Bold
 	leftHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0).BorderRight(true).BorderStyle(lipgloss.NormalBorder())
 	rightHalfStyle := lipgloss.NewStyle().Width(halfWidth).Padding(0)
 
-	section := func(header string, items []StatusItem) (string, error) {
+	section := func(header string, items []StatusItem, width, rowLimit int) (string, error) {
 		tableOut := &bytes.Buffer{}
-		fmt.Fprintln(tableOut, headerStyle(header))
+		fmt.Fprintln(tableOut, cs.Bold(header))
 		tp := utils.NewTablePrinterWithOptions(opts.IO, utils.TablePrinterOptions{
 			IsTTY:    opts.IO.IsStdoutTTY(),
-			MaxWidth: halfWidth,
+			MaxWidth: width,
 			Out:      tableOut,
 		})
 		if len(items) == 0 {
@@ -469,10 +469,13 @@ func statusRun(opts *StatusOptions) error {
 			tp.EndRow()
 		} else {
 			for i, si := range items {
-				if i == maxLen {
+				if i == rowLimit {
 					break
 				}
 				tp.AddField(si.Identifier, nil, idStyle)
+				if si.Reason != "" {
+					tp.AddField(si.Reason, nil, nil)
+				}
 				tp.AddField(si.Preview(), nil, nil)
 				tp.EndRow()
 			}
@@ -486,53 +489,42 @@ func statusRun(opts *StatusOptions) error {
 		return tableOut.String(), nil
 	}
 
-	mSection, err := section("Mentions", mentions)
+	mSection, err := section("Mentions", mentions, halfWidth, 5)
 	if err != nil {
 		return fmt.Errorf("failed to render 'Mentions': %w", err)
 	}
 	mSection = rightHalfStyle.Render(mSection)
 
-	rrSection, err := section("Review Requests", sg.ReviewRequests)
+	rrSection, err := section("Review Requests", sg.ReviewRequests, halfWidth, 5)
 	if err != nil {
 		return fmt.Errorf("failed to render 'Review Requests': %w", err)
 	}
 	rrSection = leftHalfStyle.Render(rrSection)
 
-	prSection, err := section("Assigned PRs", sg.AssignedPRs)
+	prSection, err := section("Assigned PRs", sg.AssignedPRs, halfWidth, 5)
 	if err != nil {
 		return fmt.Errorf("failed to render 'Assigned PRs': %w", err)
 	}
 	prSection = rightHalfStyle.Render(prSection)
 
-	issueSection, err := section("Assigned Issues", sg.AssignedIssues)
+	issueSection, err := section("Assigned Issues", sg.AssignedIssues, halfWidth, 5)
 	if err != nil {
 		return fmt.Errorf("failed to render 'Assigned Issues': %w", err)
 	}
 	issueSection = leftHalfStyle.Render(issueSection)
 
-	// TODO
-	// - goroutines for each network call + subsequent processing
-	// - ensure caching appropriately
-
-	raTP := utils.NewTablePrinter(opts.IO)
-
-	for i, ra := range sg.RepoActivity {
-		if i >= 10 {
-			break
-		}
-		raTP.AddField(ra.Repository+"#"+ra.Identifier, nil, idStyle)
-		raTP.AddField(ra.Reason, nil, nil)
-		raTP.AddField(ra.Preview(), nil, nil)
-		raTP.EndRow()
+	raSection, err := section("Repository Activity", sg.RepoActivity, fullWidth, 10)
+	if err != nil {
+		return fmt.Errorf("failed to render 'Repository Activity': %w", err)
 	}
 
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, issueSection, prSection))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, rrSection, mSection))
-	fmt.Fprintln(out, headerStyle("Repository Activity"))
+	fmt.Fprintln(out, raSection)
 
-	if err = raTP.Render(); err != nil {
-		return fmt.Errorf("failed to render 'Repository Activity': %w", err)
-	}
+	// TODO
+	// - goroutines for each network call + subsequent processing
+	// - ensure caching appropriately
 
 	return nil
 }
