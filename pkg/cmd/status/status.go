@@ -454,20 +454,36 @@ func statusRun(opts *StatusOptions) error {
 
 	sg := NewStatusGetter(client, opts.Org, opts.Exclude)
 
-	err = sg.LoadNotifications()
-	if err != nil {
-		return fmt.Errorf("could not load notifications: %w", err)
-	}
-	mentions := sg.Mentions
+	errc := make(chan error)
 
-	err = sg.LoadEvents()
-	if err != nil {
-		return fmt.Errorf("could not load events: %w", err)
-	}
+	go func() {
+		err := sg.LoadNotifications()
+		if err != nil {
+			err = fmt.Errorf("could not load notifications: %w", err)
+		}
+		errc <- err
+	}()
 
-	err = sg.LoadSearchResults()
-	if err != nil {
-		return fmt.Errorf("failed to search: %w", err)
+	go func() {
+		err := sg.LoadEvents()
+		if err != nil {
+			err = fmt.Errorf("could not load events: %w", err)
+		}
+		errc <- err
+	}()
+
+	go func() {
+		err := sg.LoadSearchResults()
+		if err != nil {
+			err = fmt.Errorf("failed to search: %w", err)
+		}
+		errc <- err
+	}()
+
+	for i := 0; i < 3; i++ {
+		if err := <-errc; err != nil {
+			return err
+		}
 	}
 
 	cs := opts.IO.ColorScheme()
@@ -512,7 +528,7 @@ func statusRun(opts *StatusOptions) error {
 		return tableOut.String(), nil
 	}
 
-	mSection, err := section("Mentions", mentions, halfWidth, 5)
+	mSection, err := section("Mentions", sg.Mentions, halfWidth, 5)
 	if err != nil {
 		return fmt.Errorf("failed to render 'Mentions': %w", err)
 	}
