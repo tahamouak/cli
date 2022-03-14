@@ -37,12 +37,6 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 		Short: "Print information about relevant issues, pull requests, and notifications across repositories",
 		Long:  "TODO",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO decide if I want to bother implementing this
-			// comically, I think this has use scoped to a single repository
-			// support `-R, --repo` override
-			opts.BaseRepo = f.BaseRepo
-			opts.HasRepoOverride = cmd.Flags().Changed("repo")
-
 			if runF != nil {
 				return runF(opts)
 			}
@@ -53,11 +47,6 @@ func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Co
 
 	cmd.Flags().StringVarP(&opts.Org, "org", "o", "", "Report status within an organization")
 	cmd.Flags().StringVarP(&opts.Exclude, "exclude", "e", "", "Comma separated list of repos to exclude in owner/name format")
-
-	// TODO ability to run for an org
-	// TODO ability to exclude repositories
-	// TODO? ability to filter to single repository
-	// TODO break out sections into individual subcommands (but prob save for future PR)
 
 	return cmd
 }
@@ -467,8 +456,9 @@ func statusRun(opts *StatusOptions) error {
 	}
 
 	sg := NewStatusGetter(client, opts.Org, opts.Exclude)
-
 	errc := make(chan error)
+
+	// TODO break out sections into individual subcommands
 
 	go func() {
 		err := sg.LoadNotifications()
@@ -574,9 +564,6 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, issueSection, prSection))
 	fmt.Fprintln(out, lipgloss.JoinHorizontal(lipgloss.Top, rrSection, mSection))
 	fmt.Fprintln(out, raSection)
-
-	// TODO
-	// - ensure caching appropriately
 
 	return nil
 }
