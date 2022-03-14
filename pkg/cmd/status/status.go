@@ -2,6 +2,7 @@ package status
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -209,10 +210,12 @@ func (s *StatusGetter) LoadNotifications() error {
 	for page := 1; page <= pages; page++ {
 		query.Add("page", fmt.Sprintf("%d", page))
 		p := fmt.Sprintf("notifications?%s", query.Encode())
-		// behavior when only one page?
 		err := c.REST(ghinstance.Default(), "GET", p, nil, &resp)
 		if err != nil {
-			return fmt.Errorf("could not get notifications: %w", err)
+			var httpErr api.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.StatusCode != 404 {
+				return fmt.Errorf("could not get notifications: %w", err)
+			}
 		}
 		ns = append(ns, resp...)
 	}
@@ -400,10 +403,12 @@ func (s *StatusGetter) LoadEvents() error {
 	for page := 1; page <= pages; page++ {
 		query.Add("page", fmt.Sprintf("%d", page))
 		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
-		// TODO handle fewer pages (ie page up not down)
 		err := c.REST(ghinstance.Default(), "GET", p, nil, &resp)
 		if err != nil {
-			return fmt.Errorf("could not get events: %w", err)
+			var httpErr api.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.StatusCode != 404 {
+				return fmt.Errorf("could not get events: %w", err)
+			}
 		}
 		events = append(events, resp...)
 	}
