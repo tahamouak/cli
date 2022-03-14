@@ -89,28 +89,6 @@ func (s StatusItem) Preview() string {
 	return strings.ReplaceAll(strings.ReplaceAll(s.preview, "\r", ""), "\n", " ")
 }
 
-func actualMention(client *http.Client, n Notification) (string, error) {
-	c := api.NewClientFromHTTP(client)
-	currentUsername, err := api.CurrentLoginName(c, ghinstance.Default())
-	if err != nil {
-		return "", err
-	}
-	resp := struct {
-		Body string
-	}{}
-	if err := c.REST(ghinstance.Default(), "GET", n.Subject.LatestCommentURL, nil, &resp); err != nil {
-		return "", err
-	}
-
-	var ret string
-
-	if strings.Contains(resp.Body, "@"+currentUsername) {
-		ret = resp.Body
-	}
-
-	return ret, nil
-}
-
 type IssueOrPR struct {
 	Number int
 	Title  string
@@ -183,12 +161,47 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 	return strings.Contains(s.Exclude, repo)
 }
 
+func (s *StatusGetter) CurrentUsername() (string, error) {
+	cachedClient := api.NewCachedClient(s.Client, time.Hour*24)
+	cachingAPIClient := api.NewClientFromHTTP(cachedClient)
+	currentUsername, err := api.CurrentLoginName(cachingAPIClient, ghinstance.Default())
+	if err != nil {
+		return "", fmt.Errorf("failed to get current username: %w", err)
+	}
+
+	return currentUsername, nil
+}
+
+func (s *StatusGetter) ActualMention(n Notification) (string, error) {
+	currentUsername, err := s.CurrentUsername()
+	if err != nil {
+		return "", err
+	}
+
+	cachedClient := api.NewCachedClient(s.Client, time.Hour*48)
+	c := api.NewClientFromHTTP(cachedClient)
+	resp := struct {
+		Body string
+	}{}
+	if err := c.REST(ghinstance.Default(), "GET", n.Subject.LatestCommentURL, nil, &resp); err != nil {
+		return "", err
+	}
+
+	var ret string
+
+	if strings.Contains(resp.Body, "@"+currentUsername) {
+		ret = resp.Body
+	}
+
+	return ret, nil
+}
+
 // These are split up by endpoint since it is along that boundary we parallelize
 // work
 
 // Populate .Mentions
 func (s *StatusGetter) LoadNotifications() error {
-	apiClient := api.NewClientFromHTTP(s.Client)
+	c := api.NewClientFromHTTP(s.Client)
 	query := url.Values{}
 	query.Add("per_page", "100")
 	query.Add("participating", "true")
@@ -206,7 +219,7 @@ func (s *StatusGetter) LoadNotifications() error {
 		query.Add("page", fmt.Sprintf("%d", page))
 		p := fmt.Sprintf("notifications?%s", query.Encode())
 		// behavior when only one page?
-		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		err := c.REST(ghinstance.Default(), "GET", p, nil, &resp)
 		if err != nil {
 			return fmt.Errorf("could not get notifications: %w", err)
 		}
@@ -307,7 +320,7 @@ func (s *StatusGetter) LoadSearchResults() error {
 
 	q = fmt.Sprintf(q, assignmentsQ, requestedQ)
 
-	apiClient := api.NewClientFromHTTP(s.Client)
+	c := api.NewClientFromHTTP(s.Client)
 
 	var resp struct {
 		Assignments struct {
@@ -321,7 +334,7 @@ func (s *StatusGetter) LoadSearchResults() error {
 			}
 		}
 	}
-	err := apiClient.GraphQL(ghinstance.Default(), q, nil, &resp)
+	err := c.GraphQL(ghinstance.Default(), q, nil, &resp)
 	if err != nil {
 		return fmt.Errorf("could not search for assignments: %w", err)
 	}
@@ -381,12 +394,11 @@ func (s *StatusGetter) LoadSearchResults() error {
 
 // Populate .RepoActivity
 func (s *StatusGetter) LoadEvents() error {
-	apiClient := api.NewClientFromHTTP(s.Client)
+	c := api.NewClientFromHTTP(s.Client)
 	query := url.Values{}
 	query.Add("per_page", "100")
 
-	// TODO caching
-	currentUsername, err := api.CurrentLoginName(apiClient, ghinstance.Default())
+	currentUsername, err := s.CurrentUsername()
 	if err != nil {
 		return err
 	}
@@ -398,7 +410,7 @@ func (s *StatusGetter) LoadEvents() error {
 		query.Add("page", fmt.Sprintf("%d", page))
 		p := fmt.Sprintf("users/%s/received_events?%s", currentUsername, query.Encode())
 		// TODO handle fewer pages (ie page up not down)
-		err := apiClient.REST(ghinstance.Default(), "GET", p, nil, &resp)
+		err := c.REST(ghinstance.Default(), "GET", p, nil, &resp)
 		if err != nil {
 			return fmt.Errorf("could not get events: %w", err)
 		}
@@ -562,7 +574,6 @@ func statusRun(opts *StatusOptions) error {
 	fmt.Fprintln(out, raSection)
 
 	// TODO
-	// - goroutines for each network call + subsequent processing
 	// - ensure caching appropriately
 
 	return nil
