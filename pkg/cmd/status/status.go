@@ -241,7 +241,7 @@ func (s *StatusGetter) LoadNotifications() error {
 			continue
 		}
 
-		if actual, err := actualMention(s.Client, n); actual != "" && err == nil {
+		if actual, err := s.ActualMention(n); actual != "" && err == nil {
 			// I'm so sorry
 			split := strings.Split(n.Subject.URL, "/")
 			s.Mentions = append(s.Mentions, StatusItem{
