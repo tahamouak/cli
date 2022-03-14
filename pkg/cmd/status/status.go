@@ -162,7 +162,7 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 }
 
 func (s *StatusGetter) CurrentUsername() (string, error) {
-	cachedClient := api.NewCachedClient(s.Client, time.Hour*24)
+	cachedClient := api.NewCachedClient(s.Client, time.Hour*48)
 	cachingAPIClient := api.NewClientFromHTTP(cachedClient)
 	currentUsername, err := api.CurrentLoginName(cachingAPIClient, ghinstance.Default())
 	if err != nil {
@@ -178,7 +178,9 @@ func (s *StatusGetter) ActualMention(n Notification) (string, error) {
 		return "", err
 	}
 
-	cachedClient := api.NewCachedClient(s.Client, time.Hour*48)
+	// long cache period since once a comment is looked up, it never needs to be
+	// consulted again.
+	cachedClient := api.NewCachedClient(s.Client, time.Hour*48*30)
 	c := api.NewClientFromHTTP(cachedClient)
 	resp := struct {
 		Body string
