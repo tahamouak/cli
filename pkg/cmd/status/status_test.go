@@ -11,7 +11,25 @@ func TestNewCmdStatus(t *testing.T) {
 		name  string
 		cli   string
 		wants StatusOptions
-	}{}
+	}{
+		{
+			name: "defaults",
+		},
+		{
+			name: "org",
+			cli:  "-o cli",
+			wants: StatusOptions{
+				Org: "cli",
+			},
+		},
+		{
+			name: "exclude",
+			cli:  "-e cli/cli,cli/go-gh",
+			wants: StatusOptions{
+				Exclude: "cli/cli,cli/go-gh",
+			},
+		},
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/internal/ghinstance"
-	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
 	"github.com/cli/cli/v2/utils"
@@ -21,12 +20,10 @@ import (
 )
 
 type StatusOptions struct {
-	BaseRepo        func() (ghrepo.Interface, error)
-	HttpClient      func() (*http.Client, error)
-	IO              *iostreams.IOStreams
-	HasRepoOverride bool
-	Org             string
-	Exclude         string
+	HttpClient func() (*http.Client, error)
+	IO         *iostreams.IOStreams
+	Org        string
+	Exclude    string
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
