@@ -20,14 +20,19 @@ import (
 )
 
 type StatusOptions struct {
-	HttpClient func() (*http.Client, error)
-	IO         *iostreams.IOStreams
-	Org        string
-	Exclude    string
+	HttpClient    func() (*http.Client, error)
+	IO            *iostreams.IOStreams
+	Org           string
+	Exclude       string
+	ShortCacheTTL time.Duration
+	LongCacheTTL  time.Duration
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
-	opts := &StatusOptions{}
+	opts := &StatusOptions{
+		ShortCacheTTL: time.Hour * 48,
+		LongCacheTTL:  time.Hour * 48 * 30,
+	}
 	opts.HttpClient = f.HttpClient
 	opts.IO = f.IOStreams
 	cmd := &cobra.Command{
@@ -126,21 +131,26 @@ func (rs Results) Swap(i, j int) {
 }
 
 type StatusGetter struct {
-	Client         *http.Client
-	Org            string
-	Exclude        string
-	AssignedPRs    []StatusItem
-	AssignedIssues []StatusItem
-	Mentions       []StatusItem
-	ReviewRequests []StatusItem
-	RepoActivity   []StatusItem
+	Client          *http.Client
+	Org             string
+	Exclude         string
+	AssignedPRs     []StatusItem
+	AssignedIssues  []StatusItem
+	Mentions        []StatusItem
+	ReviewRequests  []StatusItem
+	RepoActivity    []StatusItem
+	ShortCacheTTL   time.Duration
+	LongCacheTTL    time.Duration
+	currentUsername string
 }
 
-func NewStatusGetter(client *http.Client, org, exclude string) *StatusGetter {
+func NewStatusGetter(client *http.Client, opts *StatusOptions) *StatusGetter {
 	return &StatusGetter{
-		Client:  client,
-		Org:     org,
-		Exclude: exclude,
+		Client:        client,
+		Org:           opts.Org,
+		Exclude:       opts.Exclude,
+		ShortCacheTTL: opts.ShortCacheTTL,
+		LongCacheTTL:  opts.LongCacheTTL,
 	}
 }
 
@@ -149,12 +159,17 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 }
 
 func (s *StatusGetter) CurrentUsername() (string, error) {
-	cachedClient := api.NewCachedClient(s.Client, time.Hour*48)
+	if s.currentUsername != "" {
+		return s.currentUsername, nil
+	}
+	cachedClient := api.NewCachedClient(s.Client, s.ShortCacheTTL)
 	cachingAPIClient := api.NewClientFromHTTP(cachedClient)
 	currentUsername, err := api.CurrentLoginName(cachingAPIClient, ghinstance.Default())
 	if err != nil {
 		return "", fmt.Errorf("failed to get current username: %w", err)
 	}
+
+	s.currentUsername = currentUsername
 
 	return currentUsername, nil
 }
@@ -167,7 +182,7 @@ func (s *StatusGetter) ActualMention(n Notification) (string, error) {
 
 	// long cache period since once a comment is looked up, it never needs to be
 	// consulted again.
-	cachedClient := api.NewCachedClient(s.Client, time.Hour*48*30)
+	cachedClient := api.NewCachedClient(s.Client, s.LongCacheTTL)
 	c := api.NewClientFromHTTP(cachedClient)
 	resp := struct {
 		Body string
@@ -190,9 +205,10 @@ func (s *StatusGetter) ActualMention(n Notification) (string, error) {
 
 // Populate .Mentions
 func (s *StatusGetter) LoadNotifications() error {
+	perPage := 100
 	c := api.NewClientFromHTTP(s.Client)
 	query := url.Values{}
-	query.Add("per_page", "100")
+	query.Add("per_page", fmt.Sprintf("%d", perPage))
 	query.Add("participating", "true")
 	query.Add("all", "true")
 
@@ -215,6 +231,9 @@ func (s *StatusGetter) LoadNotifications() error {
 			}
 		}
 		ns = append(ns, resp...)
+		if len(resp) == 0 || len(resp) < perPage {
+			break
+		}
 	}
 
 	s.Mentions = []StatusItem{}
@@ -385,9 +404,10 @@ func (s *StatusGetter) LoadSearchResults() error {
 
 // Populate .RepoActivity
 func (s *StatusGetter) LoadEvents() error {
+	perPage := 100
 	c := api.NewClientFromHTTP(s.Client)
 	query := url.Values{}
-	query.Add("per_page", "100")
+	query.Add("per_page", fmt.Sprintf("%d", perPage))
 
 	currentUsername, err := s.CurrentUsername()
 	if err != nil {
@@ -408,6 +428,9 @@ func (s *StatusGetter) LoadEvents() error {
 			}
 		}
 		events = append(events, resp...)
+		if len(resp) == 0 || len(resp) < perPage {
+			break
+		}
 	}
 
 	s.RepoActivity = []StatusItem{}
@@ -457,7 +480,7 @@ func statusRun(opts *StatusOptions) error {
 		return fmt.Errorf("could not create client: %w", err)
 	}
 
-	sg := NewStatusGetter(client, opts.Org, opts.Exclude)
+	sg := NewStatusGetter(client, opts)
 	errc := make(chan error)
 
 	// TODO break out sections into individual subcommands
