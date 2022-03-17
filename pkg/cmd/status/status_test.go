@@ -103,7 +103,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
 				reg.Register(
 					httpmock.GraphQL("AssignedSearch"),
-					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
 					httpmock.StringResponse(`[]`))
@@ -122,7 +122,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
 				reg.Register(
 					httpmock.GraphQL("AssignedSearch"),
-					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
 					httpmock.StringResponse(`[]`))
@@ -143,7 +143,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
 				reg.Register(
 					httpmock.GraphQL("AssignedSearch"),
-					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
 					httpmock.StringResponse(`[]`))
