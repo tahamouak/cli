@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/httpmock"
@@ -102,8 +103,9 @@ func TestStatusRun(t *testing.T) {
 		tt.opts.HttpClient = func() (*http.Client, error) {
 			return &http.Client{Transport: reg}, nil
 		}
-		tt.opts.ShortCacheTTL = 0
-		tt.opts.LongCacheTTL = 0
+		tt.opts.CachedClient = func(c *http.Client, _ time.Duration) *http.Client {
+			return c
+		}
 		io, _, stdout, _ := iostreams.Test()
 		// TODO do i care
 		io.SetStdoutTTY(true)

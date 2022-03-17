@@ -20,18 +20,18 @@ import (
 )
 
 type StatusOptions struct {
-	HttpClient    func() (*http.Client, error)
-	IO            *iostreams.IOStreams
-	Org           string
-	Exclude       string
-	ShortCacheTTL time.Duration
-	LongCacheTTL  time.Duration
+	HttpClient   func() (*http.Client, error)
+	CachedClient func(*http.Client, time.Duration) *http.Client
+	IO           *iostreams.IOStreams
+	Org          string
+	Exclude      string
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{
-		ShortCacheTTL: time.Hour * 48,
-		LongCacheTTL:  time.Hour * 48 * 30,
+		CachedClient: func(c *http.Client, ttl time.Duration) *http.Client {
+			return api.NewCachedClient(c, ttl)
+		},
 	}
 	opts.HttpClient = f.HttpClient
 	opts.IO = f.IOStreams
@@ -131,27 +131,28 @@ func (rs Results) Swap(i, j int) {
 }
 
 type StatusGetter struct {
-	Client          *http.Client
-	Org             string
-	Exclude         string
-	AssignedPRs     []StatusItem
-	AssignedIssues  []StatusItem
-	Mentions        []StatusItem
-	ReviewRequests  []StatusItem
-	RepoActivity    []StatusItem
-	ShortCacheTTL   time.Duration
-	LongCacheTTL    time.Duration
-	currentUsername string
+	Client         *http.Client
+	cachedClient   func(*http.Client, time.Duration) *http.Client
+	Org            string
+	Exclude        string
+	AssignedPRs    []StatusItem
+	AssignedIssues []StatusItem
+	Mentions       []StatusItem
+	ReviewRequests []StatusItem
+	RepoActivity   []StatusItem
 }
 
 func NewStatusGetter(client *http.Client, opts *StatusOptions) *StatusGetter {
 	return &StatusGetter{
-		Client:        client,
-		Org:           opts.Org,
-		Exclude:       opts.Exclude,
-		ShortCacheTTL: opts.ShortCacheTTL,
-		LongCacheTTL:  opts.LongCacheTTL,
+		Client:       client,
+		Org:          opts.Org,
+		Exclude:      opts.Exclude,
+		cachedClient: opts.CachedClient,
 	}
+}
+
+func (s *StatusGetter) CachedClient(ttl time.Duration) *http.Client {
+	return s.cachedClient(s.Client, ttl)
 }
 
 func (s *StatusGetter) ShouldExclude(repo string) bool {
@@ -159,17 +160,12 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 }
 
 func (s *StatusGetter) CurrentUsername() (string, error) {
-	if s.currentUsername != "" {
-		return s.currentUsername, nil
-	}
-	cachedClient := api.NewCachedClient(s.Client, s.ShortCacheTTL)
+	cachedClient := s.CachedClient(time.Hour * 48)
 	cachingAPIClient := api.NewClientFromHTTP(cachedClient)
 	currentUsername, err := api.CurrentLoginName(cachingAPIClient, ghinstance.Default())
 	if err != nil {
 		return "", fmt.Errorf("failed to get current username: %w", err)
 	}
-
-	s.currentUsername = currentUsername
 
 	return currentUsername, nil
 }
@@ -182,7 +178,7 @@ func (s *StatusGetter) ActualMention(n Notification) (string, error) {
 
 	// long cache period since once a comment is looked up, it never needs to be
 	// consulted again.
-	cachedClient := api.NewCachedClient(s.Client, s.LongCacheTTL)
+	cachedClient := s.CachedClient(time.Hour * 24 * 30)
 	c := api.NewClientFromHTTP(cachedClient)
 	resp := struct {
 		Body string
