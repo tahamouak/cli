@@ -29,10 +29,7 @@ func REST(method, p string) Matcher {
 		if !strings.EqualFold(req.Method, method) {
 			return false
 		}
-		if req.URL.Path != "/"+p {
-			return false
-		}
-		return true
+		return req.URL.Path == "/"+p
 	}
 }
 
