@@ -95,6 +95,67 @@ func TestStatusRun(t *testing.T) {
 			opts:    &StatusOptions{},
 			wantOut: "Assigned Issues                       │Assigned PRs                          \nNothing here ^_^                      │Nothing here ^_^                      \n                                      │                                      \nReview Requests                       │Mentions                              \nNothing here ^_^                      │Nothing here ^_^                      \n                                      │                                      \nRepository Activity\nNothing here ^_^\n\n",
 		},
+		{
+			name: "something",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL("UserCurrent"),
+					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
+				reg.Register(
+					httpmock.GraphQL("AssignedSearch"),
+					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+				reg.Register(
+					httpmock.REST("GET", "notifications"),
+					httpmock.StringResponse(`[]`))
+				reg.Register(
+					httpmock.REST("GET", "users/jillvalentine/received_events"),
+					httpmock.StringResponse(`[]`))
+			},
+			opts:    &StatusOptions{},
+			wantOut: "TODO",
+		},
+		{
+			name: "exclude a repository",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL("UserCurrent"),
+					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
+				reg.Register(
+					httpmock.GraphQL("AssignedSearch"),
+					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+				reg.Register(
+					httpmock.REST("GET", "notifications"),
+					httpmock.StringResponse(`[]`))
+				reg.Register(
+					httpmock.REST("GET", "users/jillvalentine/received_events"),
+					httpmock.StringResponse(`[]`))
+			},
+			opts: &StatusOptions{
+				Exclude: "wesker/evil,umbrella/bad",
+			},
+			wantOut: "TODO",
+		},
+		{
+			name: "filter to an org",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.GraphQL("UserCurrent"),
+					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
+				reg.Register(
+					httpmock.GraphQL("AssignedSearch"),
+					httpmock.StringResponse(`{"data": { "assignments": {"edges": [] }, "reviewRequested": {"edges": []}}}`))
+				reg.Register(
+					httpmock.REST("GET", "notifications"),
+					httpmock.StringResponse(`[]`))
+				reg.Register(
+					httpmock.REST("GET", "users/jillvalentine/received_events"),
+					httpmock.StringResponse(`[]`))
+			},
+			opts: &StatusOptions{
+				Org: "rpd",
+			},
+			wantOut: "TODO",
+		},
 	}
 
 	for _, tt := range tests {
