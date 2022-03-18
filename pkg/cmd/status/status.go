@@ -131,15 +131,16 @@ func (rs Results) Swap(i, j int) {
 }
 
 type StatusGetter struct {
-	Client         *http.Client
-	cachedClient   func(*http.Client, time.Duration) *http.Client
-	Org            string
-	Exclude        string
-	AssignedPRs    []StatusItem
-	AssignedIssues []StatusItem
-	Mentions       []StatusItem
-	ReviewRequests []StatusItem
-	RepoActivity   []StatusItem
+	currentUsername string
+	Client          *http.Client
+	cachedClient    func(*http.Client, time.Duration) *http.Client
+	Org             string
+	Exclude         string
+	AssignedPRs     []StatusItem
+	AssignedIssues  []StatusItem
+	Mentions        []StatusItem
+	ReviewRequests  []StatusItem
+	RepoActivity    []StatusItem
 }
 
 func NewStatusGetter(client *http.Client, opts *StatusOptions) *StatusGetter {
@@ -160,12 +161,17 @@ func (s *StatusGetter) ShouldExclude(repo string) bool {
 }
 
 func (s *StatusGetter) CurrentUsername() (string, error) {
+	if s.currentUsername != "" {
+		return s.currentUsername, nil
+	}
 	cachedClient := s.CachedClient(time.Hour * 48)
 	cachingAPIClient := api.NewClientFromHTTP(cachedClient)
 	currentUsername, err := api.CurrentLoginName(cachingAPIClient, ghinstance.Default())
 	if err != nil {
 		return "", fmt.Errorf("failed to get current username: %w", err)
 	}
+
+	s.currentUsername = currentUsername
 
 	return currentUsername, nil
 }

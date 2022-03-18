@@ -68,6 +68,12 @@ func TestNewCmdStatus(t *testing.T) {
 }
 
 func TestStatusRun(t *testing.T) {
+	stubMentions := func(reg *httpmock.Registry) {
+		reg.Register(
+			httpmock.REST("GET", "repos/rpd/todo/issues/110"),
+			httpmock.StringResponse(`{"body":""}`))
+		// TODO fill in rest, decide which are proper mentions
+	}
 	tests := []struct {
 		name      string
 		httpStubs func(*httpmock.Registry)
@@ -98,6 +104,7 @@ func TestStatusRun(t *testing.T) {
 		{
 			name: "something",
 			httpStubs: func(reg *httpmock.Registry) {
+				stubMentions(reg)
 				reg.Register(
 					httpmock.GraphQL("UserCurrent"),
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
@@ -106,7 +113,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
 					httpmock.StringResponse(`[]`))
@@ -125,7 +132,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
 					httpmock.StringResponse(`[]`))
@@ -146,7 +153,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/search.json"))
 				reg.Register(
 					httpmock.REST("GET", "notifications"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
 					httpmock.StringResponse(`[]`))
