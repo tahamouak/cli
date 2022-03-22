@@ -2,36 +2,6 @@
     {
         "reason": "team_mention",
         "subject": {
-            "title": "Fix thing",
-            "url": "https://api.github.com/repos/rpd/todo/pulls/212567",
-            "latest_comment_url": null,
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "rpd/todo",
-            "owner": {
-                "login": "rpd"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Only write UTF-8 BOM on Windows where it is needed",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5326",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/pulls/5326",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "team_mention",
-        "subject": {
             "title": "Tracking: Close an issue as either resolved or unresolved",
             "url": "https://api.github.com/repos/vilmibm/testing/issues/594",
             "latest_comment_url": "https://api.github.com/repos/vilmibm/testing/issues/comments/1070788734",
@@ -45,72 +15,12 @@
         }
     },
     {
-        "reason": "assign",
-        "subject": {
-            "title": "Support listing and removing Dependabot secrets",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5160",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/pulls/5160",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Lock door",
-            "url": "https://api.github.com/repos/rpd/todo/pulls/21233",
-            "latest_comment_url": "https://api.github.com/repos/rpd/todo/pulls/21233",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "rpd/todo",
-            "owner": {
-                "login": "rpd"
-            }
-        }
-    },
-    {
-        "reason": "comment",
-        "subject": {
-            "title": "Move PR from ready to Draft",
-            "url": "https://api.github.com/repos/cli/cli/issues/2271",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1069322818",
-            "type": "Issue"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
         "reason": "comment",
         "subject": {
             "title": "Unclear message about base repository when creating a PR",
             "url": "https://api.github.com/repos/cli/cli/issues/2090",
             "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1069309546",
             "type": "Issue"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Bump github.com/stretchr/testify from 1.7.0 to 1.7.1",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5323",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/pulls/5323",
-            "type": "PullRequest"
         },
         "repository": {
             "full_name": "cli/cli",
@@ -141,20 +51,6 @@
             "url": "https://api.github.com/repos/rpd/todo/issues/4113",
             "latest_comment_url": "https://api.github.com/repos/rpd/todo/issues/4113",
             "type": "Issue"
-        },
-        "repository": {
-            "full_name": "rpd/todo",
-            "owner": {
-                "login": "rpd"
-            }
-        }
-    },
-    {
-        "reason": "team_mention",
-        "subject": {
-            "url": "https://api.github.com/repos/rpd/todo/pulls/25611",
-            "latest_comment_url": "https://api.github.com/repos/rpd/todo/issues/comments/1067220968",
-            "type": "PullRequest"
         },
         "repository": {
             "full_name": "rpd/todo",
@@ -198,7 +94,7 @@
         "subject": {
             "title": "use the action to precompile",
             "url": "https://api.github.com/repos/vilmibm/gh-screensaver/issues/15",
-            "latest_comment_url": "https://api.github.com/repos/vilmibm/gh-screensaver/issues/comments/1064703673",
+            "latest_comment_url": "https://api.github.com/repos/vilmibm/gh-screensaver/issues/comments/10",
             "type": "Issue"
         },
         "repository": {
@@ -221,126 +117,6 @@
             "full_name": "vilmibm/testing",
             "owner": {
                 "login": "vilmibm"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Bump Cobra to eliminate Viper",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5293",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/pulls/5293",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Add ability to use negated qualifiers",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5288",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1063752780",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "mention",
-        "subject": {
-            "title": "yolo",
-            "url": "https://api.github.com/repos/vilmibm/testing/issues/157",
-            "latest_comment_url": "https://api.github.com/repos/vilmibm/testing/issues/comments/1062413675",
-            "type": "Issue"
-        },
-        "repository": {
-            "full_name": "vilmibm/testing",
-            "owner": {
-                "login": "vilmibm"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Fix obtained scope mapping to include implied scopes",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5256",
-            "latest_comment_url": null,
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "comment",
-        "subject": {
-            "title": "Support stacked-diffs workflow with `gh pr create`",
-            "url": "https://api.github.com/repos/cli/cli/issues/2693",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/2693",
-            "type": "Issue"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Use `git config user.email` to determine the author email used when merging with `gh pr merge`",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5229",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1061870036",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "assign",
-        "subject": {
-            "title": "Pin extensions",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5272",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1068238964",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
-            }
-        }
-    },
-    {
-        "reason": "review_requested",
-        "subject": {
-            "title": "Fix HexToRGB panic",
-            "url": "https://api.github.com/repos/cli/cli/pulls/5247",
-            "latest_comment_url": "https://api.github.com/repos/cli/cli/issues/comments/1061347041",
-            "type": "PullRequest"
-        },
-        "repository": {
-            "full_name": "cli/cli",
-            "owner": {
-                "login": "cli"
             }
         }
     },

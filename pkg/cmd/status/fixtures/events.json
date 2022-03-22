@@ -14,7 +14,7 @@
         },
         "created_at": "2022-03-17T15:42:28Z",
         "org": {
-            "login": "cli"
+            "login": "rpd"
         }
     },
     {
@@ -33,10 +33,7 @@
                 "body": "We are working on dedicated `search` functionality and might be exploring some syntax for denoting \"NOT\" qualifiers. However, until something like this is added, you can always make \"NOT\" searches by using the `--search` flag:\r\n```\r\ngh pr list --search \"-author:app/dependabot\"\r\n```\r\n/cc @samcoe "
             }
         },
-        "created_at": "2022-03-17T12:36:31Z",
-        "org": {
-            "login": "cli"
-        }
+        "created_at": "2022-03-17T12:36:31Z"
     },
     {
         "type": "DeleteEvent",

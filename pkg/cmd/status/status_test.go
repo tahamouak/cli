@@ -68,12 +68,6 @@ func TestNewCmdStatus(t *testing.T) {
 }
 
 func TestStatusRun(t *testing.T) {
-	stubMentions := func(reg *httpmock.Registry) {
-		reg.Register(
-			httpmock.REST("GET", "repos/rpd/todo/issues/110"),
-			httpmock.StringResponse(`{"body":""}`))
-		// TODO fill in rest, decide which are proper mentions
-	}
 	tests := []struct {
 		name      string
 		httpStubs func(*httpmock.Registry)
@@ -104,7 +98,21 @@ func TestStatusRun(t *testing.T) {
 		{
 			name: "something",
 			httpStubs: func(reg *httpmock.Registry) {
-				stubMentions(reg)
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/110"),
+					httpmock.StringResponse(`{"body":"hello @jillvalentine how are you"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/4113"),
+					httpmock.StringResponse(`{"body":"this is a comment"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/cli/cli/issues/1096"),
+					httpmock.StringResponse(`{"body":"@jillvalentine hi"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/comments/1065"),
+					httpmock.StringResponse(`{"body":"not a real mention"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/vilmibm/gh-screensaver/issues/comments/10"),
+					httpmock.StringResponse(`{"body":"a message for @jillvalentine"}`))
 				reg.Register(
 					httpmock.GraphQL("UserCurrent"),
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
@@ -119,11 +127,23 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/events.json"))
 			},
 			opts:    &StatusOptions{},
-			wantOut: "TODO",
+			wantOut: "Assigned Issues                       │Assigned PRs                          \nvilmibm/testing#157     yolo          │cli/cli#5272  Pin extensions          \ncli/cli#3223            Repo garden...│rpd/todo#73   Board up RPD windows    \nrpd/todo#514            Reducing zo...│cli/cli#4768  Issue Frecency          \nvilmibm/testing#74      welp          │                                      \nadreyer/arkestrator#22  complete mo...│                                      \n                                      │                                      \nReview Requests                       │Mentions                              \ncli/cli#5272          Pin extensions  │rpd/todo#110               hello @j...\nvilmibm/testing#1234  Foobar          │cli/cli#1096               @jillval...\nrpd/todo#50           Welcome party...│vilmibm/gh-screensaver#15  a messag...\ncli/cli#4671          This pull req...│                                      \nrpd/todo#49           Haircut for Leon│                                      \n                                      │                                      \nRepository Activity\nrpd/todo#5326         new PR                        Only write UTF-8 BOM on W...\nvilmibm/testing#5325  comment on Ability to sea...  We are working on dedicat...\ncli/cli#5319          comment on [Codespaces] D...  Wondering if we shouldn't...\ncli/cli#5300          new issue                     Terminal bell when a runn...\n\n",
 		},
 		{
 			name: "exclude a repository",
 			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/110"),
+					httpmock.StringResponse(`{"body":"hello @jillvalentine how are you"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/4113"),
+					httpmock.StringResponse(`{"body":"this is a comment"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/comments/1065"),
+					httpmock.StringResponse(`{"body":"not a real mention"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/vilmibm/gh-screensaver/issues/comments/10"),
+					httpmock.StringResponse(`{"body":"a message for @jillvalentine"}`))
 				reg.Register(
 					httpmock.GraphQL("UserCurrent"),
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
@@ -138,13 +158,50 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/events.json"))
 			},
 			opts: &StatusOptions{
-				Exclude: "wesker/evil,umbrella/bad",
+				Exclude: "cli/cli",
 			},
-			wantOut: "TODO",
+			// NOTA BENE: you'll see cli/cli in search results because that happens
+			// server side and the fixture doesn't account for that
+			wantOut: "Assigned Issues                       │Assigned PRs                          \nvilmibm/testing#157     yolo          │cli/cli#5272  Pin extensions          \ncli/cli#3223            Repo garden...│rpd/todo#73   Board up RPD windows    \nrpd/todo#514            Reducing zo...│cli/cli#4768  Issue Frecency          \nvilmibm/testing#74      welp          │                                      \nadreyer/arkestrator#22  complete mo...│                                      \n                                      │                                      \nReview Requests                       │Mentions                              \ncli/cli#5272          Pin extensions  │rpd/todo#110               hello @j...\nvilmibm/testing#1234  Foobar          │vilmibm/gh-screensaver#15  a messag...\nrpd/todo#50           Welcome party...│                                      \ncli/cli#4671          This pull req...│                                      \nrpd/todo#49           Haircut for Leon│                                      \n                                      │                                      \nRepository Activity\nrpd/todo#5326         new PR                        Only write UTF-8 BOM on W...\nvilmibm/testing#5325  comment on Ability to sea...  We are working on dedicat...\n\n",
+		},
+		{
+			name: "exclude repositories",
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/vilmibm/gh-screensaver/issues/comments/10"),
+					httpmock.StringResponse(`{"body":"a message for @jillvalentine"}`))
+				reg.Register(
+					httpmock.GraphQL("UserCurrent"),
+					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
+				reg.Register(
+					httpmock.GraphQL("AssignedSearch"),
+					httpmock.FileResponse("./fixtures/search.json"))
+				reg.Register(
+					httpmock.REST("GET", "notifications"),
+					httpmock.FileResponse("./fixtures/notifications.json"))
+				reg.Register(
+					httpmock.REST("GET", "users/jillvalentine/received_events"),
+					httpmock.FileResponse("./fixtures/events.json"))
+			},
+			opts: &StatusOptions{
+				Exclude: "cli/cli,rpd/todo",
+			},
+			// NOTA BENE: you'll see cli/cli in search results because that happens
+			// server side and the fixture doesn't account for that
+			wantOut: "Assigned Issues                       │Assigned PRs                          \nvilmibm/testing#157     yolo          │cli/cli#5272  Pin extensions          \ncli/cli#3223            Repo garden...│rpd/todo#73   Board up RPD windows    \nrpd/todo#514            Reducing zo...│cli/cli#4768  Issue Frecency          \nvilmibm/testing#74      welp          │                                      \nadreyer/arkestrator#22  complete mo...│                                      \n                                      │                                      \nReview Requests                       │Mentions                              \ncli/cli#5272          Pin extensions  │vilmibm/gh-screensaver#15  a messag...\nvilmibm/testing#1234  Foobar          │                                      \nrpd/todo#50           Welcome party...│                                      \ncli/cli#4671          This pull req...│                                      \nrpd/todo#49           Haircut for Leon│                                      \n                                      │                                      \nRepository Activity\nvilmibm/testing#5325  comment on Ability to sea...  We are working on dedicat...\n\n",
 		},
 		{
 			name: "filter to an org",
 			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/110"),
+					httpmock.StringResponse(`{"body":"hello @jillvalentine how are you"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/4113"),
+					httpmock.StringResponse(`{"body":"this is a comment"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/rpd/todo/issues/comments/1065"),
+					httpmock.StringResponse(`{"body":"not a real mention"}`))
 				reg.Register(
 					httpmock.GraphQL("UserCurrent"),
 					httpmock.StringResponse(`{"data": {"viewer": {"login": "jillvalentine"}}}`))
@@ -161,7 +218,7 @@ func TestStatusRun(t *testing.T) {
 			opts: &StatusOptions{
 				Org: "rpd",
 			},
-			wantOut: "TODO",
+			wantOut: "Assigned Issues                       │Assigned PRs                          \nvilmibm/testing#157     yolo          │cli/cli#5272  Pin extensions          \ncli/cli#3223            Repo garden...│rpd/todo#73   Board up RPD windows    \nrpd/todo#514            Reducing zo...│cli/cli#4768  Issue Frecency          \nvilmibm/testing#74      welp          │                                      \nadreyer/arkestrator#22  complete mo...│                                      \n                                      │                                      \nReview Requests                       │Mentions                              \ncli/cli#5272          Pin extensions  │rpd/todo#110  hello @jillvalentine ...\nvilmibm/testing#1234  Foobar          │                                      \nrpd/todo#50           Welcome party...│                                      \ncli/cli#4671          This pull req...│                                      \nrpd/todo#49           Haircut for Leon│                                      \n                                      │                                      \nRepository Activity\nrpd/todo#5326  new PR  Only write UTF-8 BOM on Windows where it is needed\n\n",
 		},
 	}
 
