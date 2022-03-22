@@ -269,8 +269,7 @@ func (s *StatusGetter) LoadNotifications() error {
 	return nil
 }
 
-// Populate .AssignedPRs, .AssignedIssues, .ReviewRequests
-func (s *StatusGetter) LoadSearchResults() error {
+func (s *StatusGetter) buildSearchQuery() string {
 	q := `
 	query AssignedSearch {
 	  assignments: search(first: 25, type: ISSUE, query:"%s") {
@@ -313,7 +312,6 @@ func (s *StatusGetter) LoadSearchResults() error {
 		  }
 	  }
 	}`
-
 	assignmentsQ := `assignee:@me state:open%s%s`
 	requestedQ := `state:open review-requested:@me%s%s`
 
@@ -330,8 +328,12 @@ func (s *StatusGetter) LoadSearchResults() error {
 	assignmentsQ = fmt.Sprintf(assignmentsQ, orgFilter, excludeFilter)
 	requestedQ = fmt.Sprintf(requestedQ, orgFilter, excludeFilter)
 
-	q = fmt.Sprintf(q, assignmentsQ, requestedQ)
+	return fmt.Sprintf(q, assignmentsQ, requestedQ)
+}
 
+// Populate .AssignedPRs, .AssignedIssues, .ReviewRequests
+func (s *StatusGetter) LoadSearchResults() error {
+	q := s.buildSearchQuery()
 	c := api.NewClientFromHTTP(s.Client)
 
 	var resp struct {

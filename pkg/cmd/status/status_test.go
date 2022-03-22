@@ -250,3 +250,21 @@ func TestStatusRun(t *testing.T) {
 		})
 	}
 }
+
+func Test_buildSearchQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		sg   StatusGetter
+		want string
+	}{
+		{
+			name: "nothing",
+			want: "TODO",
+		},
+		// TODO fill in this shit
+	}
+
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, tt.sg.buildSearchQuery())
+	}
+}
