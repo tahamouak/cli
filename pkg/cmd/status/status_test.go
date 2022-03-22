@@ -116,7 +116,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/events.json"))
 			},
 			opts:    &StatusOptions{},
 			wantOut: "TODO",
@@ -135,7 +135,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/events.json"))
 			},
 			opts: &StatusOptions{
 				Exclude: "wesker/evil,umbrella/bad",
@@ -156,7 +156,7 @@ func TestStatusRun(t *testing.T) {
 					httpmock.FileResponse("./fixtures/notifications.json"))
 				reg.Register(
 					httpmock.REST("GET", "users/jillvalentine/received_events"),
-					httpmock.StringResponse(`[]`))
+					httpmock.FileResponse("./fixtures/events.json"))
 			},
 			opts: &StatusOptions{
 				Org: "rpd",
