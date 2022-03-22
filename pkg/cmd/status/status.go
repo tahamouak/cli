@@ -461,6 +461,10 @@ func (s *StatusGetter) LoadEvents() error {
 			si.Reason = "new PR"
 			si.preview = e.Payload.PullRequest.Title
 			number = e.Payload.PullRequest.Number
+		case "PullRequestReviewCommentEvent":
+			si.Reason = "comment on " + e.Payload.PullRequest.Title
+			si.preview = e.Payload.Comment.Body
+			number = e.Payload.PullRequest.Number
 		case "IssueCommentEvent":
 			si.Reason = "comment on " + e.Payload.Issue.Title
 			si.preview = e.Payload.Comment.Body
