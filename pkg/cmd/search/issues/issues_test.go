@@ -114,6 +114,8 @@ func TestNewCmdIssues(t *testing.T) {
       --language=language
       --locked
       --mentions=mentions
+      --no-label
+      --repo=owner/repo
       --updated=updated
       --visibility=public
       `,
@@ -133,6 +135,8 @@ func TestNewCmdIssues(t *testing.T) {
 						Is:        []string{"public", "locked"},
 						Language:  "language",
 						Mentions:  "mentions",
+						No:        []string{"label"},
+						Repo:      []string{"owner/repo"},
 						Type:      "issue",
 						Updated:   "updated",
 					},

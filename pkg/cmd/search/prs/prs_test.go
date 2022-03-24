@@ -102,6 +102,7 @@ func TestNewCmdPrs(t *testing.T) {
       --language=language
       --locked
       --merged
+      --no-milestone
       --updated=updated
       --visibility=public
       `,
@@ -120,6 +121,7 @@ func TestNewCmdPrs(t *testing.T) {
 						In:        []string{"title", "body"},
 						Is:        []string{"public", "locked", "merged"},
 						Language:  "language",
+						No:        []string{"milestone"},
 						Type:      "pr",
 						Updated:   "updated",
 					},

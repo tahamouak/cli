@@ -50,12 +50,12 @@ type Qualifiers struct {
 	Mentions         string
 	Merged           string
 	Milestone        string
-	No               string
+	No               []string
 	Org              string
 	Project          string
 	Pushed           string
 	Reactions        string
-	Repo             string
+	Repo             []string
 	Review           string
 	ReviewRequested  string
 	ReviewedBy       string

@@ -55,17 +55,17 @@ func TestIssueExportData(t *testing.T) {
 	}{
 		{
 			name:   "exports requested fields",
-			fields: []string{"assignee", "body", "comments", "labels", "isLocked", "title", "updatedAt"},
+			fields: []string{"assignees", "body", "commentsCount", "labels", "isLocked", "title", "updatedAt"},
 			issue: Issue{
-				Assignee:  User{Login: "test"},
-				Body:      "body",
-				Comments:  1,
-				Labels:    []Label{{Name: "label1"}, {Name: "label2"}},
-				IsLocked:  true,
-				Title:     "title",
-				UpdatedAt: updatedAt,
+				Assignees:     []User{{Login: "test"}},
+				Body:          "body",
+				CommentsCount: 1,
+				Labels:        []Label{{Name: "label1"}, {Name: "label2"}},
+				IsLocked:      true,
+				Title:         "title",
+				UpdatedAt:     updatedAt,
 			},
-			output: `{"assignee":{"id":0,"login":"test","type":""},"body":"body","comments":1,"isLocked":true,"labels":[{"color":"","id":0,"name":"label1","url":""},{"color":"","id":0,"name":"label2","url":""}],"title":"title","updatedAt":"2021-02-28T12:30:00Z"}`,
+			output: `{"assignees":[{"id":"","login":"test","type":"","url":""}],"body":"body","commentsCount":1,"isLocked":true,"labels":[{"color":"","id":"","name":"label1","url":""},{"color":"","id":"","name":"label2","url":""}],"title":"title","updatedAt":"2021-02-28T12:30:00Z"}`,
 		},
 	}
 	for _, tt := range tests {

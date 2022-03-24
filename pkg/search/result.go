@@ -32,25 +32,29 @@ var RepositoryFields = []string{
 	"size",
 	"stargazersCount",
 	"updatedAt",
+	"url",
 	"visibility",
 	"watchersCount",
 }
 
 var IssueFields = []string{
-	"assignee",
+	"assignees",
+	"author",
 	"authorAssociation",
 	"body",
 	"closedAt",
-	"comments",
+	"commentsCount",
 	"createdAt",
 	"id",
-	"labels",
 	"isLocked",
+	"isPullRequest",
+	"labels",
 	"number",
-	"pullRequestLinks",
+	"repository",
 	"state",
 	"title",
 	"updatedAt",
+	"url",
 }
 
 type RepositoriesResult struct {
@@ -77,7 +81,7 @@ type Repository struct {
 	HasProjects     bool      `json:"has_projects"`
 	HasWiki         bool      `json:"has_wiki"`
 	Homepage        string    `json:"homepage"`
-	ID              int64     `json:"id"`
+	ID              string    `json:"node_id"`
 	IsArchived      bool      `json:"archived"`
 	IsDisabled      bool      `json:"disabled"`
 	IsFork          bool      `json:"fork"`
@@ -91,6 +95,7 @@ type Repository struct {
 	PushedAt        time.Time `json:"pushed_at"`
 	Size            int       `json:"size"`
 	StargazersCount int       `json:"stargazers_count"`
+	URL             string    `json:"url"`
 	UpdatedAt       time.Time `json:"updated_at"`
 	Visibility      string    `json:"visibility"`
 	WatchersCount   int       `json:"watchers_count"`
@@ -105,21 +110,23 @@ type License struct {
 
 type User struct {
 	GravatarID string `json:"gravatar_id"`
-	ID         int64  `json:"id"`
+	ID         string `json:"node_id"`
 	Login      string `json:"login"`
 	SiteAdmin  bool   `json:"site_admin"`
 	Type       string `json:"type"`
+	URL        string `json:"url"`
 }
 
 type Issue struct {
-	Assignee          User             `json:"assignee"`
+	Assignees         []User           `json:"assignees"`
+	Author            User             `json:"user"`
 	AuthorAssociation string           `json:"author_association"`
 	Body              string           `json:"body"`
 	ClosedAt          time.Time        `json:"closed_at"`
-	Comments          int              `json:"comments"`
+	CommentsCount     int              `json:"comments"`
 	CreatedAt         time.Time        `json:"created_at"`
 	HTMLURL           string           `json:"html_url"`
-	ID                int64            `json:"id"`
+	ID                string           `json:"node_id"`
 	Labels            []Label          `json:"labels"`
 	IsLocked          bool             `json:"locked"`
 	Number            int              `json:"number"`
@@ -129,7 +136,6 @@ type Issue struct {
 	Title             string           `json:"title"`
 	URL               string           `json:"url"`
 	UpdatedAt         time.Time        `json:"updated_at"`
-	User              User             `json:"user"`
 }
 
 type PullRequestLinks struct {
@@ -141,7 +147,7 @@ type PullRequestLinks struct {
 
 type Label struct {
 	Color string `json:"color"`
-	ID    int64  `json:"id"`
+	ID    string `json:"node_id"`
 	Name  string `json:"name"`
 	URL   string `json:"url"`
 }
@@ -162,6 +168,7 @@ func (repo Repository) ExportData(fields []string) map[string]interface{} {
 				"id":    repo.Owner.ID,
 				"login": repo.Owner.Login,
 				"type":  repo.Owner.Type,
+				"url":   repo.Owner.URL,
 			}
 		default:
 			sf := fieldByName(v, f)
@@ -180,13 +187,27 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 	data := map[string]interface{}{}
 	for _, f := range fields {
 		switch f {
-		case "assignee":
-			data[f] = map[string]interface{}{
-				"id":    issue.Assignee.ID,
-				"login": issue.Assignee.Login,
-				"type":  issue.Assignee.Type,
+		case "assignees":
+			assignees := make([]interface{}, 0, len(issue.Assignees))
+			for _, assignee := range issue.Assignees {
+				assignees = append(assignees, map[string]interface{}{
+					"id":    assignee.ID,
+					"login": assignee.Login,
+					"type":  assignee.Type,
+					"url":   assignee.URL,
+				})
 			}
-		case "Labels":
+			data[f] = assignees
+		case "author":
+			data[f] = map[string]interface{}{
+				"id":    issue.Author.ID,
+				"login": issue.Author.Login,
+				"type":  issue.Author.Type,
+				"url":   issue.Author.URL,
+			}
+		case "isPullRequest":
+			data[f] = issue.IsPullRequest()
+		case "labels":
 			labels := make([]interface{}, 0, len(issue.Labels))
 			for _, label := range issue.Labels {
 				labels = append(labels, map[string]interface{}{
@@ -197,18 +218,12 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 				})
 			}
 			data[f] = labels
-		case "PullRequestLinks":
+		case "repository":
+			comp := strings.Split(issue.RepositoryURL, "/")
+			name := strings.Join(comp[len(comp)-2:], "/")
 			data[f] = map[string]interface{}{
-				"diffUrl":  issue.PullRequestLinks.DiffURL,
-				"htmlUrl":  issue.PullRequestLinks.HTMLURL,
-				"patchUrl": issue.PullRequestLinks.PatchURL,
-				"url":      issue.PullRequestLinks.URL,
-			}
-		case "User":
-			data[f] = map[string]interface{}{
-				"id":    issue.User.ID,
-				"login": issue.User.Login,
-				"type":  issue.User.Type,
+				"name": name,
+				"url":  issue.RepositoryURL,
 			}
 		default:
 			sf := fieldByName(v, f)
