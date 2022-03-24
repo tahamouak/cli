@@ -146,10 +146,11 @@ type PullRequestLinks struct {
 }
 
 type Label struct {
-	Color string `json:"color"`
-	ID    string `json:"node_id"`
-	Name  string `json:"name"`
-	URL   string `json:"url"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+	ID          string `json:"node_id"`
+	Name        string `json:"name"`
+	URL         string `json:"url"`
 }
 
 func (repo Repository) ExportData(fields []string) map[string]interface{} {
@@ -211,10 +212,11 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 			labels := make([]interface{}, 0, len(issue.Labels))
 			for _, label := range issue.Labels {
 				labels = append(labels, map[string]interface{}{
-					"color": label.Color,
-					"id":    label.ID,
-					"name":  label.Name,
-					"url":   label.URL,
+					"color":       label.Color,
+					"description": label.Description,
+					"id":          label.ID,
+					"name":        label.Name,
+					"url":         label.URL,
 				})
 			}
 			data[f] = labels
