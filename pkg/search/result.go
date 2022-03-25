@@ -95,17 +95,16 @@ type Repository struct {
 	PushedAt        time.Time `json:"pushed_at"`
 	Size            int       `json:"size"`
 	StargazersCount int       `json:"stargazers_count"`
-	URL             string    `json:"url"`
+	URL             string    `json:"html_url"`
 	UpdatedAt       time.Time `json:"updated_at"`
 	Visibility      string    `json:"visibility"`
 	WatchersCount   int       `json:"watchers_count"`
 }
 
 type License struct {
-	HTMLURL string `json:"html_url"`
-	Key     string `json:"key"`
-	Name    string `json:"name"`
-	URL     string `json:"url"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	URL  string `json:"html_url"`
 }
 
 type User struct {
@@ -114,7 +113,7 @@ type User struct {
 	Login      string `json:"login"`
 	SiteAdmin  bool   `json:"site_admin"`
 	Type       string `json:"type"`
-	URL        string `json:"url"`
+	URL        string `json:"html_url"`
 }
 
 type Issue struct {
@@ -125,7 +124,6 @@ type Issue struct {
 	ClosedAt          time.Time        `json:"closed_at"`
 	CommentsCount     int              `json:"comments"`
 	CreatedAt         time.Time        `json:"created_at"`
-	HTMLURL           string           `json:"html_url"`
 	ID                string           `json:"node_id"`
 	Labels            []Label          `json:"labels"`
 	IsLocked          bool             `json:"locked"`
@@ -134,15 +132,12 @@ type Issue struct {
 	RepositoryURL     string           `json:"repository_url"`
 	State             string           `json:"state"`
 	Title             string           `json:"title"`
-	URL               string           `json:"url"`
+	URL               string           `json:"html_url"`
 	UpdatedAt         time.Time        `json:"updated_at"`
 }
 
 type PullRequestLinks struct {
-	DiffURL  string `json:"diff_url"`
-	HTMLURL  string `json:"html_url"`
-	PatchURL string `json:"patch_url"`
-	URL      string `json:"url"`
+	URL string `json:"html_url"`
 }
 
 type Label struct {
@@ -150,7 +145,6 @@ type Label struct {
 	Description string `json:"description"`
 	ID          string `json:"node_id"`
 	Name        string `json:"name"`
-	URL         string `json:"url"`
 }
 
 func (repo Repository) ExportData(fields []string) map[string]interface{} {
@@ -195,7 +189,6 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 					"id":    assignee.ID,
 					"login": assignee.Login,
 					"type":  assignee.Type,
-					"url":   assignee.URL,
 				})
 			}
 			data[f] = assignees
@@ -204,7 +197,6 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 				"id":    issue.Author.ID,
 				"login": issue.Author.Login,
 				"type":  issue.Author.Type,
-				"url":   issue.Author.URL,
 			}
 		case "isPullRequest":
 			data[f] = issue.IsPullRequest()
@@ -216,16 +208,14 @@ func (issue Issue) ExportData(fields []string) map[string]interface{} {
 					"description": label.Description,
 					"id":          label.ID,
 					"name":        label.Name,
-					"url":         label.URL,
 				})
 			}
 			data[f] = labels
 		case "repository":
 			comp := strings.Split(issue.RepositoryURL, "/")
-			name := strings.Join(comp[len(comp)-2:], "/")
+			nameWithOwner := strings.Join(comp[len(comp)-2:], "/")
 			data[f] = map[string]interface{}{
-				"name": name,
-				"url":  issue.RepositoryURL,
+				"nameWithOwner": nameWithOwner,
 			}
 		default:
 			sf := fieldByName(v, f)

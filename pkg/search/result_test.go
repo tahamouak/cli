@@ -65,7 +65,7 @@ func TestIssueExportData(t *testing.T) {
 				Title:         "title",
 				UpdatedAt:     updatedAt,
 			},
-			output: `{"assignees":[{"id":"","login":"test","type":"","url":""}],"body":"body","commentsCount":1,"isLocked":true,"labels":[{"color":"","description":"","id":"","name":"label1","url":""},{"color":"","description":"","id":"","name":"label2","url":""}],"title":"title","updatedAt":"2021-02-28T12:30:00Z"}`,
+			output: `{"assignees":[{"id":"","login":"test","type":""}],"body":"body","commentsCount":1,"isLocked":true,"labels":[{"color":"","description":"","id":"","name":"label1"},{"color":"","description":"","id":"","name":"label2"}],"title":"title","updatedAt":"2021-02-28T12:30:00Z"}`,
 		},
 	}
 	for _, tt := range tests {
